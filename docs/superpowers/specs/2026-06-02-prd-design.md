@@ -192,11 +192,11 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 
 | 字段 | 内容 |
 |------|------|
-| 描述 | 系统自动判别"新保/续保"类型并动态加载校验规则 |
-| 输入 | 提交的资料元数据（含业务类型字段或资料组合） |
+| 描述 | 根据事务类型和路由规则，将事务分发至对应 Flow 执行，支持按百分比分配 |
+| 输入 | 事务类型（用户提交时指定）、已配置的路由规则 |
 | 输出 | 路由后的事务（绑定对应 Flow ID） |
-| 规则 | 新保：至少包含 1 份影像资料+手机号；续保：至少包含 1 份影像资料+手机号；不限制上传文件数量 |
-| 验收 | 影像数量 ≥1 即可路由；0 份影像资料时事务置为 FAIL 并提示缺项 |
+| 规则 | 每个事务类型可配置多个路由规则（如 Flow A 占 70%、Flow B 占 30%）；路由规则按权重百分比随机分配；支持按 Flow 版本分配；事务类型由用户在提交时指定，系统仅做校验和路由分发 |
+| 验收 | 用户提交时指定事务类型后，系统正确分配对应 Flow；权重分配在大量事务下符合配置比例（偏差 ≤5%） |
 
 #### FR-SVR-004 Schema 校验
 
@@ -476,11 +476,13 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 | Worker | 桌面客户端节点 |
 | Device | Android 设备 |
 | Flow | RPA 流程定义 |
+| FlowVersion | Flow 的版本记录（含脚本包） |
 | Step | Flow 中的步骤定义 |
 | StepExecution | Step 执行记录 |
 | Attachment | 影像附件 |
 | AuditLog | 审计日志 |
 | StateTransition | 状态变更记录 |
+| RouteRule | 事务类型到 Flow 的路由规则，支持按百分比分配 |
 
 ### 5.2 实体字段定义
 
@@ -490,6 +492,7 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 |------|------|------|
 | transaction_id | String(32) PK | 全局唯一 ID |
 | external_id | String(64) | 外部业务 ID（幂等用） |
+| transaction_type | String(64) | 用户提交时指定的事务类型（如 RENEWAL/NEW），由路由规则映射到 Flow |
 | business_type | Enum | NEW（新保）/ RENEWAL（续保）|
 | status | Enum | PENDING/DISPATCHED/DOWNLOADING/RUNNING/SUCCESS/FAIL/DLQ |
 | customer_phone | String(11) | 手机号（加密存储） |
@@ -647,6 +650,21 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 | details | JSON | 详细信息 |
 | created_at | DateTime | 时间戳 |
 
+#### RouteRule（路由规则）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| rule_id | String PK | 规则 ID |
+| transaction_type | String(64) | 事务类型（如 RENEWAL/NEW），与用户提交时一致 |
+| flow_id | String FK | 分配的 Flow |
+| flow_version | String | 指定 Flow 版本（为空则使用 current_version） |
+| weight | Int | 权重百分比（1-100），同 transaction_type 下所有规则权重之和应为 100 |
+| priority | Int | 优先级（数值越小优先级越高，用于规则排序） |
+| is_active | Boolean | 是否启用 |
+| created_by | String | 创建人 User ID |
+| created_at | DateTime | 创建时间 |
+| updated_at | DateTime | 更新时间 |
+
 #### StateTransition（状态变更记录）
 
 | 字段 | 类型 | 说明 |
@@ -665,6 +683,8 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 User ──N:1── Role
 Transaction ──N:1── User (submitted_by)
 Transaction ──N:1── Flow
+Transaction ──N:1── RouteRule (via transaction_type)
+RouteRule ──N:1── Flow
 Transaction ──N:1── Worker (可空)
 Transaction ──N:1── Device (可空)
 Transaction ──1:N── Attachment
@@ -689,7 +709,7 @@ Worker ──1:N── Device
 | 业务接口 | 销售提交、查询事务 | HTTPS REST |
 | 调度接口 | Worker 注册、心跳、任务领取 | HTTPS REST + WebSocket |
 | 设备接口 | Device 文件下载、状态上报 | HTTPS REST |
-| 管理接口 | 用户/角色/Flow 管理 | HTTPS REST |
+| 管理接口 | 用户/角色/Flow/路由规则管理 | HTTPS REST |
 | 监控接口 | Dashboard 数据查询 | HTTPS REST |
 
 ### 6.2 REST API 清单
@@ -794,6 +814,10 @@ Worker ──1:N── Device
 | GET | /api/v1/flows/{id}/versions/{version}/download | 下载脚本包（Worker 用） | Worker Token |
 | GET | /api/v1/flows/{id}/steps | Flow 步骤详情 | Admin Token |
 | PUT | /api/v1/flows/{id}/schema | 更新校验 Schema | Admin Token |
+| GET | /api/v1/routes | 路由规则列表 | Admin Token |
+| POST | /api/v1/routes | 创建/更新路由规则 | Admin Token |
+| PUT | /api/v1/routes/{rule_id} | 更新路由规则（含权重调整） | Admin Token |
+| DELETE | /api/v1/routes/{rule_id} | 删除路由规则 | Admin Token |
 
 #### 6.2.5 监控接口
 
@@ -1178,6 +1202,8 @@ Worker ──1:N── Device
 | AC-022 | 流程版本管理 | 支持发布、回滚、停用；已发布版本可被 Worker 拉取 |
 | AC-023 | 脚本同步 | Worker 启动时校验版本，有新版本时下载并更新本地脚本 |
 | AC-024 | 版本更新提示 | Worker 检测到新版本后日志输出更新提示，不阻塞当前任务 |
+| AC-025 | 路由规则配置 | 管理员可为每种事务类型配置多个路由规则（含权重百分比） |
+| AC-026 | 按百分比分配 | 相同事务类型的大量事务按权重百分比分配到对应 Flow，偏差 ≤5% |
 
 ### 10.2 非功能验收
 
