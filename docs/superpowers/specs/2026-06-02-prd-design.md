@@ -23,6 +23,7 @@
 | Worker | 安装在桌面端的客户端代理，负责接收调度指令并编排 RPA 执行 |
 | Device | 挂载在 Worker 上的 Android 设备，执行实际的保单录入操作 |
 | Flow | 一个完整的 RPA 流程定义，由多个有序 Step 组成 |
+| FlowVersion | Flow 的版本记录，包含脚本包和参数，支持多版本共存与回滚 |
 | Step | Flow 中的单个操作步骤，如"打开APP"、"填写表单"、"上传照片"、"等待用户确认" |
 | CONFIRM Step | 一种特殊 Step 类型，执行时截取屏幕截图推送至用户确认，确认后继续执行 |
 | DLQ | Dead Letter Queue，死信队列，用于隔离连续失败的事务 |
@@ -317,6 +318,26 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 | 规则 | 回调失败重试 3 次（指数退避）；回调与 Web 通知并行发送；callback_url 在事务提交时可选配置 |
 | 验收 | 回调在 5s 内送达；失败重试不影响 Web 通知通道 |
 
+#### FR-SVR-016 流程脚本上传
+
+| 字段 | 内容 |
+|------|------|
+| 描述 | 管理员通过 Web 门户或 API 上传 Airtest Python 脚本包（.zip/.py），并设置流程参数 |
+| 输入 | Flow ID、脚本包文件、流程参数（JSON，如 APP 包名、等待超时等）、版本说明 |
+| 输出 | 新版本号、脚本包存储路径 |
+| 规则 | 脚本包单文件 ≤50MB；仅允许 .py/.zip 格式；上传时自动进行语法校验（`python -m py_compile`）；参数与 Schema 校验一致；每次上传自动递增版本号 |
+| 验收 | 上传成功返回版本号；语法错误脚本拒绝上传并返回错误行号；参数缺失时提示补全 |
+
+#### FR-SVR-017 流程版本管理
+
+| 字段 | 内容 |
+|------|------|
+| 描述 | 管理 Flow 的多版本生命周期，支持发布、回滚、停用 |
+| 输入 | Flow ID、版本号、操作类型（publish/rollback/deprecate） |
+| 输出 | 操作结果、当前生效版本号 |
+| 规则 | 同一 Flow 同时仅一个"已发布"版本；回滚操作将指定旧版本重新设为已发布；已停用版本不再分发给 Worker；版本号格式 semver（如 1.0.0 → 1.0.1） |
+| 验收 | 发布后 Worker 可拉取到新版本；回滚后生效版本正确切换；停用版本不被调度使用 |
+
 ### 4.2 客户端功能（FR-CLI-xxx）
 
 #### FR-CLI-001 自动注册
@@ -336,8 +357,8 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 | 描述 | 周期性上报本机及挂载设备的健康度 |
 | 输入 | 本机 CPU/内存/磁盘、设备电量/存储/锁屏状态 |
 | 输出 | 心跳包（含上述指标） |
-| 规则 | 心跳间隔 30s；指标异常（如设备电量<20%）触发告警 |
-| 验收 | 服务端 Dashboard 实时反映客户端状态 |
+| 规则 | 心跳间隔 30s；指标异常（如设备电量<20%）触发告警；心跳包中携带本地已缓存 Flow 版本信息，服务端据此判断是否有新版本需要下载 |
+| 验收 | 服务端 Dashboard 实时反映客户端状态；服务端响应心跳中携带"有更新"标记，Worker 据此触发脚本下载 |
 
 #### FR-CLI-003 指令监听
 
@@ -378,6 +399,16 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 | 输出 | 服务端确认回传 |
 | 规则 | 回传失败重试 5 次；截图压缩后上传（JPEG quality 70） |
 | 验收 | 服务端可查询到完整执行记录和截图；上报延迟 ≤5s |
+
+#### FR-CLI-007 流程脚本同步
+
+| 字段 | 内容 |
+|------|------|
+| 描述 | Worker 根据需要从服务端下载有效的 Flow 脚本并本地存储，检测到新版本时提示更新 |
+| 输入 | Worker 已注册的 Flow 列表、本地已缓存版本 |
+| 输出 | 下载的脚本包、本地存储路径 |
+| 规则 | 启动时和服务端校验本地已缓存 Flow 版本；若有新版本则下载并替换本地脚本；本地脚本仅供当前 Worker 使用，目录权限 700；支持增量更新（仅下载版本差异部分）；无新版本时不重复下载 |
+| 验收 | 新版本发布后 Worker 在下次心跳前检测到差异；下载完成后本地脚本立即可用；旧版本脚本在更新前保留备份（.bak） |
 
 ### 4.3 移动端功能（FR-MOB-xxx）
 
@@ -533,10 +564,27 @@ RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
 | flow_id | String PK | Flow ID |
 | flow_name | String(64) | Flow 名称 |
 | business_type | Enum | NEW/RENEWAL |
-| version | String | 版本号 |
+| current_version | String | 当前已发布版本号（指向 FlowVersion.version） |
 | schema | JSON | 输入校验 Schema |
 | is_active | Boolean | 是否启用 |
 | created_at | DateTime | 创建时间 |
+
+#### FlowVersion（流程版本）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| version_id | String PK | 版本记录 ID（UUID） |
+| flow_id | String FK | 所属 Flow |
+| version | String | 版本号（semver，如 1.0.0） |
+| script_path | String | 脚本包存储路径（OSS） |
+| script_md5 | String(32) | 脚本包 MD5 |
+| params_schema | JSON | 流程参数 Schema（描述预期参数结构） |
+| params_example | JSON | 参数示例值 |
+| changelog | String(512) | 版本变更说明 |
+| status | Enum | DRAFT/PUBLISHED/DEPRECATED |
+| created_by | String | 创建人 User ID |
+| created_at | DateTime | 创建时间 |
+| published_at | DateTime | 发布时间（DRAFT 时为空） |
 
 #### Step（步骤定义）
 
@@ -623,7 +671,9 @@ Transaction ──1:N── Attachment
 Transaction ──1:N── StepExecution
 Transaction ──1:N── StateTransition
 Transaction ──1:N── AuditLog
+Flow ──1:N── FlowVersion
 Flow ──1:N── Step
+FlowVersion ──1:N── Step (via current_version binding on Step.flow_id+version)
 StepExecution ──N:1── Step
 Worker ──1:N── Device
 ```
@@ -709,6 +759,8 @@ Worker ──1:N── Device
 | GET | /api/v1/tasks/poll | 长轮询领取任务 | Worker Token |
 | POST | /api/v1/tasks/{id}/ack | 确认任务接收 | Worker Token |
 | POST | /api/v1/tasks/{id}/result | 上报任务结果 | Worker Token |
+| GET | /api/v1/workers/scripts/versions | 查询本地 Flow 版本状态（与服务端校验） | Worker Token |
+| GET | /api/v1/workers/scripts/download | 下载最新版本脚本包（仅返回有更新的） | Worker Token |
 | GET | /api/v1/devices | 查询设备池 | Admin Token |
 | PUT | /api/v1/devices/{id}/status | 更新设备状态（禁用等） | Admin Token |
 
@@ -733,6 +785,13 @@ Worker ──1:N── Device
 | GET | /api/v1/roles | 角色列表 | Admin Token |
 | GET | /api/v1/flows | Flow 列表 | Admin Token |
 | POST | /api/v1/flows | 创建/更新 Flow | Admin Token |
+| GET | /api/v1/flows/{id} | 查询 Flow 详情（含当前版本） | Admin Token |
+| GET | /api/v1/flows/{id}/versions | 查询 Flow 版本列表 | Admin Token |
+| POST | /api/v1/flows/{id}/versions | 上传新版本脚本包 | Admin Token |
+| POST | /api/v1/flows/{id}/versions/{version}/publish | 发布版本（置为已发布） | Admin Token |
+| POST | /api/v1/flows/{id}/versions/{version}/rollback | 回滚到指定版本 | Admin Token |
+| PUT | /api/v1/flows/{id}/versions/{version}/deprecate | 停用指定版本 | Admin Token |
+| GET | /api/v1/flows/{id}/versions/{version}/download | 下载脚本包（Worker 用） | Worker Token |
 | GET | /api/v1/flows/{id}/steps | Flow 步骤详情 | Admin Token |
 | PUT | /api/v1/flows/{id}/schema | 更新校验 Schema | Admin Token |
 
@@ -1080,7 +1139,8 @@ Worker ──1:N── Device
 | 配置管理 | 客户端与移动端配置（服务器地址、存储路径等）支持 YAML/JSON 文件配置，禁止硬编码 |
 | 数据库 | PostgreSQL（主存储）；Redis（可选，按业务规模引入） |
 | 消息队列 | RabbitMQ 或 Redis Stream（可选，按业务规模引入） |
-| 对象存储 | MinIO（自建）或 S3 兼容云存储 |
+| 对象存储 | MinIO（自建）或 S3 兼容云存储，用于存储影像附件和流程脚本包 |
+| 脚本存储规范 | 流程脚本包（.py/.zip）存储于 OSS，目录结构：`/flows/{flow_id}/{version}/script.zip`；本地缓存于 Worker：`~/.3is-auto/flows/{flow_id}/{version}/` |
 | 容器化 | Backend 服务 Docker 化，支持 K8s 编排 |
 | 日志格式 | 结构化 JSON，统一字段命名（snake_case） |
 | API 规范 | RESTful，OpenAPI 3.0 文档自动生成 |
@@ -1114,6 +1174,10 @@ Worker ──1:N── Device
 | AC-018 | 用户确认通过 | 用户确认后事务立即恢复 RUNNING，继续执行后续 Step |
 | AC-019 | 用户确认拒绝 | 用户拒绝后事务 FAIL，记录拒绝原因 |
 | AC-020 | 确认超时自动继续 | 超时后自动视为通过，继续执行并记录日志 |
+| AC-021 | 流程脚本上传 | 管理员可上传 .py/.zip 脚本包，上传成功返回版本号；语法错误拒绝 |
+| AC-022 | 流程版本管理 | 支持发布、回滚、停用；已发布版本可被 Worker 拉取 |
+| AC-023 | 脚本同步 | Worker 启动时校验版本，有新版本时下载并更新本地脚本 |
+| AC-024 | 版本更新提示 | Worker 检测到新版本后日志输出更新提示，不阻塞当前任务 |
 
 ### 10.2 非功能验收
 
