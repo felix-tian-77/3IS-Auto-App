@@ -23,7 +23,8 @@
 | Worker | 安装在桌面端的客户端代理，负责接收调度指令并编排 RPA 执行 |
 | Device | 挂载在 Worker 上的 Android 设备，执行实际的保单录入操作 |
 | Flow | 一个完整的 RPA 流程定义，由多个有序 Step 组成 |
-| Step | Flow 中的单个操作步骤，如"打开APP"、"填写表单"、"上传照片" |
+| Step | Flow 中的单个操作步骤，如"打开APP"、"填写表单"、"上传照片"、"等待用户确认" |
+| CONFIRM Step | 一种特殊 Step 类型，执行时截取屏幕截图推送至用户确认，确认后继续执行 |
 | DLQ | Dead Letter Queue，死信队列，用于隔离连续失败的事务 |
 | ATT | Average Transaction Time，事务平均执行时长 |
 | SN/UDID | Android 设备序列号/唯一设备标识 |
@@ -114,7 +115,8 @@
 提交资料 → 校验(至少1份影像+手机号) → 路由至新保Flow
 → Step1: 打开保险APP → Step2: 选择新保入口
 → Step3: 填写手机号 → Step4~StepN: 逐张上传影像资料
-→ StepN+1: 提交表单 → StepN+2: 截图确认 → 完成
+→ StepN+1: 提交表单 → StepN+2: 截图等待用户确认(CONFIRM)
+→ StepN+3: 确认后提交/完成
 ```
 
 ### 3.3 续保单流程
@@ -125,7 +127,8 @@
 提交资料 → 校验(至少1份影像+手机号) → 路由至续保Flow
 → Step1: 打开保险APP → Step2: 选择续保入口
 → Step3: 填写手机号 → Step4~StepN: 逐张上传影像资料
-→ StepN+1: 提交表单 → StepN+2: 截图确认 → 完成
+→ StepN+1: 提交表单 → StepN+2: 截图等待用户确认(CONFIRM)
+→ StepN+3: 确认后提交/完成
 ```
 
 ### 3.4 状态机
@@ -135,6 +138,8 @@ PENDING → DISPATCHED → DOWNLOADING → RUNNING → SUCCESS
                                               → FAIL
                                                   → RETRY → RUNNING (最多N次)
                                                   → DLQ (终态失败)
+RUNNING → WAITING_CONFIRM → RUNNING (用户确认后继续)
+                            → RUNNING (超时自动继续)
 ```
 
 | 状态 | 触发条件 | 说明 |
@@ -143,6 +148,7 @@ PENDING → DISPATCHED → DOWNLOADING → RUNNING → SUCCESS
 | DISPATCHED | 调度中心分配 Worker+Device | 任务已下发 |
 | DOWNLOADING | Device 开始下载影像资料 | 资料传输中 |
 | RUNNING | 下载完成，RPA 脚本开始执行 | 自动化操作中 |
+| WAITING_CONFIRM | 执行到 CONFIRM 类型 Step，截图已推送用户 | 等待用户确认 |
 | SUCCESS | RPA 执行完成，结果验证通过 | 正常终态 |
 | FAIL | 执行异常/超时/校验失败 | 可重试 |
 | DLQ | 连续失败超过阈值 | 死信队列，需人工介入 |
@@ -153,6 +159,7 @@ PENDING → DISPATCHED → DOWNLOADING → RUNNING → SUCCESS
 - **RPA 步骤失败**：Step 级重试（按 Retry Policy），全部重试耗尽后事务 FAIL
 - **Worker 宕机**：服务端心跳超时检测，事务回退至 PENDING 重新调度
 - **Device 离线**：调度中心跳过该设备，重新选择可用设备
+- **用户确认超时**：超过 confirm_timeout_ms 未确认，自动视为通过，继续执行后续 Step
 
 ---
 
@@ -290,6 +297,26 @@ PENDING → DISPATCHED → DOWNLOADING → RUNNING → SUCCESS
 | 规则 | DLQ 事务不自动重试；运维可查看失败原因、重新提交或归档 |
 | 验收 | DLQ 事务可单独管理；重新提交后回到正常流程 |
 
+#### FR-SVR-014 用户确认通知
+
+| 字段 | 内容 |
+|------|------|
+| 描述 | RPA 执行到 CONFIRM 类型 Step 时，将截图推送至提交用户进行确认 |
+| 输入 | Transaction ID、Step execution ID、截图 URL、确认提示文案 |
+| 输出 | 用户确认结果（通过/拒绝）或超时自动通过 |
+| 规则 | 通知渠道：Web 页面通知 + API 回调（如有配置 callback_url）；事务状态变更为 WAITING_CONFIRM；超时时间可配置（默认 30min），超时自动视为通过并继续执行 |
+| 验收 | 截图在 3s 内送达用户；用户确认后事务立即恢复 RUNNING；超时后自动继续并记录日志 |
+
+#### FR-SVR-015 用户确认回调
+
+| 字段 | 内容 |
+|------|------|
+| 描述 | 支持通过 API 回调通知第三方系统有待确认的截图 |
+| 输入 | 事务提交时配置的 callback_url、确认请求体（含截图URL、事务信息） |
+| 输出 | 回调响应 |
+| 规则 | 回调失败重试 3 次（指数退避）；回调与 Web 通知并行发送；callback_url 在事务提交时可选配置 |
+| 验收 | 回调在 5s 内送达；失败重试不影响 Web 通知通道 |
+
 ### 4.2 客户端功能（FR-CLI-xxx）
 
 #### FR-CLI-001 自动注册
@@ -336,11 +363,11 @@ PENDING → DISPATCHED → DOWNLOADING → RUNNING → SUCCESS
 
 | 字段 | 内容 |
 |------|------|
-Steps 的执行流程 |
+| 描述 | 编排 Flow → Steps 的执行流程 |
 | 输入 | Flow 定义（含 Steps 顺序、参数、Retry Policy） |
 | 输出 | 各 Step 的执行结果、最终事务结果 |
-| 规则 | 支持 Step 级重试（默认 3 次，指数退避）；支持 Step 超时熔断（默认 60s/Step） |
-| 验收 | Flow 按定义顺序执行；任一 Step 失败触发重试；超时不阻塞整体流程 |
+| 规则 | 支持 Step 级重试（默认 3 次，指数退避）；支持 Step 超时熔断（默认 60s/Step）；遇到 CONFIRM 类型 Step 时截取屏幕截图，上报服务端并暂停执行，等待用户确认或超时后继续 |
+| 验收 | Flow 按定义顺序执行；任一 Step 失败触发重试；超时不阻塞整体流程；CONFIRM Step 正确暂停/恢复 |
 
 #### FR-CLI-006 结果回传
 
@@ -446,6 +473,7 @@ Steps 的执行流程 |
 | finished_at | DateTime | 完成时间 |
 | duration_ms | Long | 总耗时（毫秒） |
 | failure_reason | Text | 失败原因 |
+| callback_url | String(512) | 确认回调通知 URL（可选） |
 
 #### User（用户）
 
@@ -518,10 +546,12 @@ Steps 的执行流程 |
 | flow_id | String FK | 所属 Flow |
 | order | Int | 执行顺序 |
 | step_name | String(64) | 步骤名称 |
-| action_type | Enum | OPEN_APP/INPUT/UPLOAD/CLICK/SCREENSHOT/WAIT |
+| action_type | Enum | OPEN_APP/INPUT/UPLOAD/CLICK/SCREENSHOT/CONFIRM/WAIT |
 | params | JSON | 步骤参数 |
 | retry_policy | JSON | 重试策略 |
 | timeout_ms | Int | 超时时间 |
+| confirm_timeout_ms | Int | 确认超时时间（仅 CONFIRM 类型有效，默认 1800000 即 30min） |
+| confirm_prompt | String(256) | 确认提示文案（仅 CONFIRM 类型有效，如"请确认保单信息是否正确"） |
 
 #### StepExecution（步骤执行记录）
 
@@ -537,6 +567,10 @@ Steps 的执行流程 |
 | duration_ms | Long | 耗时 |
 | screenshot_url | String | 截图存储路径 |
 | error_message | Text | 错误信息 |
+| confirm_status | Enum | PENDING/CONFIRMED/REJECTED/TIMEOUT（仅 CONFIRM 类型 Step） |
+| confirm_screenshot_url | String | 确认截图 URL（仅 CONFIRM 类型 Step） |
+| confirmed_by | String | 确认人 User ID |
+| confirmed_at | DateTime | 确认时间 |
 
 #### Attachment（附件）
 
@@ -619,6 +653,8 @@ Worker ──1:N── Device
 | GET | /api/v1/transactions/{id} | 查询事务详情 | User Token |
 | GET | /api/v1/transactions | 查询事务列表（含筛选） | User Token |
 | POST | /api/v1/transactions/{id}/retry | 手动重试事务（DLQ）| Admin Token |
+| GET | /api/v1/transactions/{id}/confirms | 查询待确认截图列表 | User Token |
+| POST | /api/v1/transactions/{id}/confirms/{step_exec_id} | 用户确认/拒绝截图 | User Token |
 
 **示例：POST /api/v1/transactions 请求体**
 
@@ -628,6 +664,7 @@ Worker ──1:N── Device
   "business_type": "RENEWAL",
   "customer_phone": "138****1234",
   "customer_id_no": "310***********1234",
+  "callback_url": "https://third-party.example.com/confirm-callback",
   "attachments": [
     {
       "file_type": "ID_CARD",
@@ -1019,6 +1056,7 @@ Worker ──1:N── Device
 | Device 离线处理 | 调度跳过离线设备，事务重新分配 |
 | 死信队列 | DLQ 事务不自动重试，运维手动处理 |
 | 客户端自恢复 | Worker 进程崩溃后自动重启，恢复未完成任务 |
+| 用户确认超时 | CONFIRM Step 超时（默认 30min）自动视为通过，继续执行并记录日志 |
 
 ### 8.6 扩展性
 
@@ -1072,6 +1110,10 @@ Worker ──1:N── Device
 | AC-014 | 文件清理 | SUCCESS 事务影像文件立即清理 |
 | AC-015 | Dashboard | 关键指标可视化，数据刷新 ≤30s |
 | AC-016 | 审计追溯 | 任一事务可还原完整生命周期 |
+| AC-017 | 用户确认通知 | CONFIRM Step 截图在 3s 内送达 Web 通知和回调 URL |
+| AC-018 | 用户确认通过 | 用户确认后事务立即恢复 RUNNING，继续执行后续 Step |
+| AC-019 | 用户确认拒绝 | 用户拒绝后事务 FAIL，记录拒绝原因 |
+| AC-020 | 确认超时自动继续 | 超时后自动视为通过，继续执行并记录日志 |
 
 ### 10.2 非功能验收
 
