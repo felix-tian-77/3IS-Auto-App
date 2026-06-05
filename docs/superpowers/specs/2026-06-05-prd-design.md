@@ -5,12 +5,12 @@
 | 字段 | 内容 |
 |------|------|
 | 产品名称 | 3IS-Auto-App（车险保单自动生成 RPA 系统） |
-| 文档版本 | V1.3 |
+| 文档版本 | **V1.4** |
 | 创建日期 | 2026-06-02 |
 | 最近更新 | 2026-06-05 |
-| 文档状态 | Draft（待评审） |
+| 文档状态 | **Draft（待评审，V1.4 架构级升级）** |
 
-**文档状态机：** `Draft` → `Review` → `Approved` → `Frozen`。任何重大修订必须先回退到 `Draft`，再走一轮同行评审。当前状态为 `Draft`，正在应用 2026-06-05 存储架构调整方案（OSS-first → Server-first），等待业务方、合规方、运维方三方签字后进入 `Review` / `Approved`。
+**文档状态机：** `Draft` → `Review` → `Approved` → `Frozen`。任何重大修订必须先回退到 `Draft`，再走一轮同行评审。当前状态为 `Draft`（V1.4 架构级升级），**V1.4 在 V1.3.1.1 基础上应用 4 项架构级变更**：P1 Worker 1:1 进程模型（1 Worker = 1 Device，1 电脑启动 2-3 Worker 进程）、P2 USB 反向网络基准验证 + 自动降级、P3 PENDING 超时机制（新增 PENDING_TIMEOUT 状态）、P4 存储灾备简化（DRBD → rsync + 手动切换）。另含 3 项小修：P5 OssSignedUrl 去重、P6 Multipart 原子性语义澄清、P7 开放问题阻塞项标记。等待业务方、合规方、运维方三方签字后进入 `Review` / `Approved`。
 
 ### 修订记录
 
@@ -20,6 +20,9 @@
 | V1.1 | 2026-06-03 | 应用 2026-06-03 共识会 7 项决议 + review 8 处小修 + 4 个架构级替代方案 + 10 个缺失章节初稿 | office-hours | 待签 |
 | V1.2 | 2026-06-04 | **应用 2026-06-03 架构调整方案**：RPA 引擎由 Device 端迁至 Worker 端，Device Agent 极简化为"下载器 + ADB 目标"。架构级偏移，触达 §1.3/§1.4/§2.1/§3.1/§3.4/§3.5/§3.6/§4.2/§4.3/§5.2/§6.2.3/§6.3/§7.2/§7.5/§8.1/§9/§10/§10.3/§11.1/§12 等 27 处。详见下方"V1.2 修订明细"表。 | office-hours | 待签 |
 | V1.3 | 2026-06-05 | **应用存储架构调整方案**：文件存储从"OSS-first"翻转为"Server-first"。V1.2 客户端先传 OSS、提交时只传 `file_url` 的设计被废弃；V1.3 起客户端 `POST /api/v1/transactions` 一并 multipart 上传文件，后端落地存储（默认 `LocalStorageBackend`），通过 `POST /transactions/{id}/download-urls` 生成内部签名 URL 供 Device 直连下载。`StorageBackend` 抽象接口预留 OSS/MinIO 等扩展后端。`OssSignedUrl` 实体 DEPRECATED，由新 `DownloadUrl` 替代。架构级偏移，触达 27 处。详见下方"V1.3 修订明细"表。 | office-hours | 待签 |
+| **V1.3.1** | **2026-06-05** | **应用 office-hours 评审闭环（V1.3 patch 升级）**：4 高危前提（P1-P4）+ 5 中低危前提（P5-P9）+ 8 处小修 + 7 缺失章节。**P1 闭环**：8 处 OSS 残留清理（§2.1/§3.6/§4.1/§7.4/§11.2/§11.3/§14/§15）。**P2 闭环**：新增 §9.1 URL 签名机制（HMAC-SHA256 + KMS 托管密钥 + claim 绑定 device_id/attachment_id/customer_id + 一次性消费）。**P3 闭环**：§12 展开为 3 任务（批量迁移脚本 / OssReadOnly 适配器 / 3 个月后老事务回收）。**P4 闭环**：新增 §7.9 存储灾备设计（DRBD active-passive + Pacemaker，RPO=0 / RTO ≤ 5min）。**P5 闭环**：§8.7 容量规划补充（附件抽样分布 + 7 天保留语义 + 扩容触发）。**P6 闭环**：新增 FR-SVR-023 存储对象 GC + AC-NEW-V13-009 多文件失败回滚。**P7 闭环**：新增 §7.10 设备下载网络拓扑（USB 反向网络 + 站点 VPN 备选）。**P8 闭环**：§6.2.1 续签接口示例 + device_id 绑定。**P9 闭环**：Attachment 加 `customer_id` 字段 + §7.11 多租户隔离。**详见下方"V1.3.1 修订明细"表。** | office-hours | 待签 |
+| **V1.3.1.1** | **2026-06-05** | **应用 office-hours 二轮评审闭环（V1.3.1 patch 升级）**：4 处 V1.3.1 NEW 不一致（B-1/B-2/B-3/B-4）+ 4 处 office-hours 小修（§9.1.6 选型对比加成本列 / §11.5.1 决策表加决策日期 / §12.1 任务表加前置依赖）。**B-1 闭环**：5 处 `customer_id` 路径统一（术语表 §LocalStorageBackend + §5.4 数据流图 + §6.2.1 storage_path 示例 × 2 + AC-NEW-V13-002）。**B-2 闭环**：422 状态码 error.type 分层（§4.1 FR-SVR-001 引入 6 种 type + §10.1 AC-NEW-V13-009 引用 + §10.4 L2 契约测试覆盖）。**B-3 闭环**：§3.1 末尾 / §5.4 末尾 / §8.7 末尾加交叉引用。**B-4 闭环**：§7.10 新增 Android 版本兼容性验证清单（8 项）。**详见下方"V1.3.1.1 修订明细"表。** | office-hours | 待签 |
+| **V1.4** | **2026-06-05** | **架构级升级（4 高危 + 3 小修）**：**P1 闭环**：Worker 从 1:N（1 Worker 挂 2-3 Device）改为 1:1 进程模型（1 Worker = 1 Device，1 电脑启动 2-3 Worker 进程）。`max_concurrent_devices` 字段 DEPRECATED，Worker 启动时通过 `--adb-serial` 绑定 1 台 Device。影响 §1.3/§1.4/§2.1/§2.2/§3.1/§3.4/§3.5/§3.6/§4.1/§4.2/§4.3/§5.2/§5.3/§5.4/§6.2/§6.3/§7.1-7.5/§8.1-8.7/§9/§10/§11/§12/§13/§14/§15 等 27+ 处。**P2 闭环**：§7.10 USB 反向网络带宽目标从 ≥5MB/s 调整为 ≥3MB/s，加预生产基准测试 + 站点 VPN 自动降级路径。**P3 闭环**：§3.4 新增 `PENDING_TIMEOUT` 状态（10min 未调度 → 通知用户，非终态可恢复）。**P4 闭环**：§7.9 存储灾备从 DRBD active-passive + Pacemaker 简化为 rsync 定期同步 + 手动切换（RPO ≤5min / RTO ≤10min）；中期切 MinIO。**P5 小修**：§5.2 OssSignedUrl 去重（删除行 1120-1131 的重复定义）。**P6 小修**：§4.1 FR-SVR-001 澄清 Multipart 原子性为最终一致性模型。**P7 小修**：§11.6 Q7/Q8 标记为 Review 阻塞项。**详见下方"V1.4 修订明细"表。** | autoplan | 待签 |
 
 **V1.2 修订明细（基于架构设计文档 `2026-06-03-rpa-worker-side-architecture-design.md` V1.0）**：
 
@@ -81,20 +84,182 @@
 | 24 | §13 Runbook | 新增 RB-STORAGE-BACKEND-SWITCH、RB-STORAGE-DISK-FULL |
 | 25 | §14 开放问题 | 新增 V1.3 存储 Q12-Q15 |
 
+**V1.3.1 修订明细（基于 2026-06-05 office-hours 评审 `2026-06-05-prd-review.md`）**：
+
+| # | 章节 | 改动 | office-hours 闭环 |
+|---|------|------|-------------------|
+| 1 | 头文件 + 修订记录 | V1.3 → V1.3.1（patch 升级）；新增"应用 office-hours 评审闭环"条目 | 元数据 |
+| 2 | §2.1 角色定义 | "直连 OSS 签名 URL" → "直连 Backend 签名 URL" | P1 8 处小修 |
+| 3 | §3.1 主流程图 | （未变更，§3.1 已 V1.3 修订）| - |
+| 4 | §3.6 BCP 表 1 行 | "OSS 不可用" → "存储后端不可用（通用）" | P1 |
+| 5 | §3.6 BCP 表 2 行 | "OSS 直传通道" → "Backend 暂存队列" | P1 |
+| 6 | §4.1 FR-SVR-001 验收 | 补"5/6 成功 + 1 失败"回滚语义 | P6 闭环 |
+| 7 | §4.1 新增 FR-SVR-023 | 存储对象 GC（孤儿清理 + 7 天保留语义 + Dry-run） | P6 闭环 |
+| 8 | §5.2 Attachment | 新增 `customer_id`、`is_orphan` 字段 | P9 闭环 + P6 闭环 |
+| 9 | §5.4 新增 | 存储数据流图（完整事务文件流）| T7 |
+| 10 | §6.2.1 multipart API | 已 V1.3 修订（无需变更）| - |
+| 11 | §6.2.1 续签接口 | 新增完整 request/response 示例 + device_id 绑定 + claim 字段 | P8 闭环 |
+| 12 | §7.4 网络要求 | "Device → OSS" → "Device → Backend（经 USB 反向网络）" | P7 闭环 |
+| 13 | §7.5 硬件 | LocalStorageBackend 1TB SSD × 2 容量 | P4 闭环 |
+| 14 | §7.9 新增 | 存储灾备设计（DRBD active-passive + Pacemaker）| P4 闭环 |
+| 15 | §7.10 新增 | 设备下载网络拓扑（USB 反向网络 + 站点 VPN 备选）| P7 闭环 |
+| 16 | §7.11 新增 | 多租户隔离（customer_id 命名空间 + URL token claim）| P9 闭环 |
+| 17 | §8.1 性能 | 文件下载速率"Device → Backend 经 USB" 注解 | P7 闭环 |
+| 18 | §8.4 可观测性 | （V1.3 已新增 6 个存储指标，V1.3.1 不变）| - |
+| 19 | §8.7 容量规划 | 附件大小分布假设 + 7 天保留语义 + 扩容触发 | P5 闭环 |
+| 20 | §9.1 新增 | URL 签名机制（HMAC-SHA256 + KMS + claim 绑定）| P2 闭环 |
+| 21 | §10.1 验收 | 新增 AC-NEW-V13-009/010/011 | P6/P2/P4 闭环 |
+| 22 | §10.4 新增 | 存储测试策略（L1-L5 + URL 签名 + GC + 灾备演练）| T6 |
+| 23 | §11.1 风险 | （V1.3 已新增 3 项存储风险，V1.3.1 不变）| - |
+| 24 | §11.2 外部依赖 | OSS 地域行加 DEPRECATED 标记 | P1 |
+| 25 | §11.3 假设前提 | AS-007 明确"已废止（V1.3 起不再依赖 OSS 直连）" | P1 |
+| 26 | §11.5.1 新增 | office-hours 评审补充决策（13 项 V1.3.1 决策）| 全部闭环 |
+| 27 | §11.6 新增 | 开放问题追踪表（19 项，7 项待定）| 评审追踪 |
+| 28 | §12.1 新增 | V1.2 → V1.3.1 迁移详细计划（3 任务）| P3 闭环 |
+| 29 | §13 Runbook | （V1.3 已新增 4 个 Runbook，V1.3.1 不变）| - |
+| 30 | §14 开放问题 | 新增 Q16-Q19（4 项已闭环）+ V1.3.1 office-hours 评审闭环段 | 评审追踪 |
+| 31 | §15 关联文档 | 增 V1.3 PRD 引用 + V1.3.1 引用 + 评审 doc 引用 | 元数据 |
+
+**改动统计**：31 处修改 + 8 大新章节（§7.9/§7.10/§7.11/§9.1/§10.4/§5.4/§11.5.1/§11.6/§12.1）。
+
+**office-hours 闭环统计**：
+- P1（OSS 残留清理）：5 处 ✓
+- P2（URL 签名未定义）：§9.1 + AC-NEW-V13-010 ✓
+- P3（迁移策略模糊）：§12.1 3 任务 ✓
+- P4（灾备策略缺失）：§7.9 + AC-NEW-V13-011 ✓
+- P5（1TB SSD 缺论证）：§8.7 附件分布 + 7 天语义 + 扩容触发 ✓
+- P6（Multipart 失败回滚）：FR-SVR-023 + AC-NEW-V13-009 ✓
+- P7（Backend 公网暴露 + 网络拓扑）：§7.10 USB 反向网络 ✓
+- P8（URL 续签语义）：§6.2.1 续签示例 + device_id 绑定 ✓
+- P9（多租户隔离）：§5.2 customer_id + §7.11 + URL token claim ✓
+
+**4 个高危 + 5 个中低危 + 9 个办公时间新增项 全部闭环。**
+
+**V1.3.1.1 修订明细（基于 2026-06-05 office-hours 二轮评审 `2026-06-05-prd-review-v131.md`）**：
+
+| # | 章节 | 改动 | 闭环项 | 工作量 |
+|---|------|------|--------|--------|
+| 1 | 头文件 + 修订记录 | V1.3.1 → V1.3.1.1（patch 升级）；新增"应用 office-hours 二轮评审闭环"条目 | 元数据 | 5 min |
+| 2 | 术语表 §LocalStorageBackend | 默认路径加 `customer_id` | B-1 | 5 min |
+| 3 | §5.4 存储数据流图 | 路径加 `customer_id`（图示已对，仅文字注释更新）| B-1 | 5 min |
+| 4 | §5.4 关键不变量 | 422 引用 `error.type=MULTIPART_PARTIAL_FAIL` + 续签引用 `REFRESH_EXCEEDED` | B-2 | 5 min |
+| 5 | §5.4 末尾 | 加 V1.3.1 交叉引用（§3.4 状态机 + §4.1 error.type 体系） | B-3 | 5 min |
+| 6 | §3.1 末尾 | 加 V1.3.1 交叉引用（§5.4 存储数据流图 + §3.4 状态机） | B-3 | 5 min |
+| 7 | §3.1 §V1.3 关键变化 | 加 V1.3.1 交叉引用行 | B-3 | 5 min |
+| 8 | §4.1 FR-SVR-001 验收 | 引入 422 error.type 分层（6 种 type）+ 响应体示例 | B-2 | 30 min |
+| 9 | §6.2.1 示例响应 | storage_path 加 `customer_id`（2 处）| B-1 | 5 min |
+| 10 | §6.2.1 续签示例 | REFRESH_EXCEEDED 引用 error.type 体系 | B-2 | 5 min |
+| 11 | §7.10 末尾 | 新增 Android 版本兼容性验证清单（8 项）| B-4 | 30 min |
+| 12 | §8.7 末尾 | 加 V1.3.1 交叉引用（§3.4 状态机的并发事务数）| B-3 | 5 min |
+| 13 | §9.1.6 选型对比 | 加"实施成本（人天）"+"库依赖"两列 | E.1 | 5 min |
+| 14 | §10.1 AC-NEW-V13-009 | 引用 `error.type=MULTIPART_PARTIAL_FAIL` | B-2 | 5 min |
+| 15 | §10.4 L2 契约测试 | error.type 分层测试覆盖（5 种 type）| B-2 | 5 min |
+| 16 | §10.4 L2 refresh 用例 | 加 `error.type=REFRESH_EXCEEDED` | B-2 | 5 min |
+| 17 | §11.5.1 决策表 | 加"决策日期"列（2026-06-05 统一标注）| E.2 | 10 min |
+| 18 | §12.1 任务 1 表 | 加"前置依赖"行（无） | E.3 | 5 min |
+| 19 | §12.1 任务 2 表 | 加"前置依赖"行（任务 1 至少 50%）| E.3 | 5 min |
+| 20 | §12.1 任务 3 表 | 加"前置依赖"行（任务 1 + 任务 2 全部完成）| E.3 | 5 min |
+
+**改动统计**：20 处修改（5 处 B-1 路径统一 + 6 处 B-2 422 分层 + 3 处 B-3 交叉引用 + 1 处 B-4 兼容性清单 + 3 处 E.小修 + 2 处元数据）
+
+**office-hours 二轮评审闭环统计**：
+- B-1（customer_id 路径）：5 处 ✓
+- B-2（422 语义分层）：3 处 + error.type 体系 ✓
+- B-3（交叉引用）：3 处 ✓
+- B-4（Android 兼容性）：1 节 + 8 项验证清单 ✓
+- E.1（成本列）：§9.1.6 ✓
+- E.2（决策日期）：§11.5.1 7 行 ✓
+- E.3（前置依赖）：§12.1 3 任务 ✓
+
+**4 处 V1.3.1 NEW 不一致 + 4 处 office-hours 小修 全部闭环。**
+
+**总工作量**：~2.5h（与 office-hours 二轮评审预估 ~2.2h 基本一致）
+
+**V1.4 修订明细（基于 2026-06-05 autoplan 评审闭环）**：
+
+| # | 章节 | 改动 | 闭环项 | 工作量 |
+|---|------|------|--------|--------|
+| 1 | 头文件 + 修订记录 | V1.3.1.1 → V1.4（架构级升级）；新增"应用 4 高危 + 3 小修"条目 | 元数据 | 10 min |
+| 2 | 术语表 Worker | "编排 + 执行" → "单设备执行器（1 Worker = 1 Device）" | P1 | 5 min |
+| 3 | 术语表 max_concurrent_devices | 标 DEPRECATED（V1.4 起 1:1 模型不再需要） | P1 | 5 min |
+| 4 | 术语表新增 Worker 进程 | 新增"同台电脑可启动 2-3 个 Worker 进程，各自独立" | P1 | 5 min |
+| 5 | 术语表新增 PENDING_TIMEOUT | 新增状态术语定义 | P3 | 5 min |
+| 6 | §1.3 价值主张 | ATT 确定性提升（1:1 独占 → 无轮转延迟）；Worker 崩溃爆炸半径缩小（1 事务 vs 2-3 事务） | P1 | 10 min |
+| 7 | §1.4 范围边界 | "单 Worker 限 2-3 Device" → "1 Worker = 1 Device，1 电脑可启动 2-3 Worker" | P1 | 5 min |
+| 8 | §2.1 角色定义 | Worker 降级为"单设备执行器"；权限矩阵更新 | P1 | 10 min |
+| 9 | §3.1 主流程 | Worker 启动时绑定 adb_serial；多 Worker 并行 | P1 | 10 min |
+| 10 | §3.4 状态机 | 新增 PENDING_TIMEOUT 状态（10min 未调度） | P3 | 10 min |
+| 11 | §3.5 异常分支 | 新增 PENDING 超时 → PENDING_TIMEOUT | P3 | 5 min |
+| 12 | §3.6 BCP | Worker 进程崩溃影响从 2-3 事务缩小为 1 事务 | P1 | 5 min |
+| 13 | §4.1 FR-SVR-001 | 澄清 Multipart 原子性为最终一致性模型 | P6 | 5 min |
+| 14 | §4.1 FR-SVR-001 | 新增 estimated_wait 字段 | P3 | 5 min |
+| 15 | §4.2 FR-CLI-001 | 注册时上报 adb_serial 绑定；移除 max_concurrent_devices | P1 | 10 min |
+| 16 | §4.2 FR-CLI-002 | 心跳移除 current_device_count | P1 | 5 min |
+| 17 | §4.2 FR-CLI-005 | Worker 内部无设备调度逻辑，简化为单设备执行 | P1 | 10 min |
+| 18 | §5.2 Worker 实体 | max_concurrent_devices / current_device_count 标 DEPRECATED；新增 bound_device_id | P1 | 10 min |
+| 19 | §5.2 OssSignedUrl | 删除重复定义（行 1120-1131） | P5 | 5 min |
+| 20 | §5.3 ER 图 | Worker 与 Device 改为 1:1 关系 | P1 | 10 min |
+| 21 | §5.4 数据流图 | Worker 启动绑定 adb_serial 注释 | P1 | 5 min |
+| 22 | §6.2.1 业务接口 | 响应新增 estimated_wait | P3 | 5 min |
+| 23 | §6.2.2 调度接口 | Worker 注册接口移除 max_concurrent_devices | P1 | 5 min |
+| 24 | §6.3 Socket | Worker 端口可配置（8765/8766/8767） | P1 | 5 min |
+| 25 | §7.1 逻辑架构图 | 重画：1 电脑 = 2-3 Worker × 1 Device | P1 | 15 min |
+| 26 | §7.2 部署拓扑 | Worker 硬件 8C 16GB → 4C 8GB | P1 | 5 min |
+| 27 | §7.5 硬件建议 | Worker 规格 4C 8GB 100GB SSD；1 电脑跑 2-3 Worker | P1 | 10 min |
+| 28 | §7.7 演进路径 | MVP 容量更新 | P1 | 5 min |
+| 29 | §7.9 存储灾备 | DRBD → rsync 定期同步 + 手动切换 | P4 | 20 min |
+| 30 | §7.10 设备下载网络 | 带宽目标 ≥5MB/s → ≥3MB/s；加基准测试 + VPN 降级 | P2 | 15 min |
+| 31 | §8.1 性能 | ATT 确定性提升；Worker 硬件调整；USB 带宽调低 | P1+P2 | 10 min |
+| 32 | §8.2 可用性 | Worker 崩溃影响 1 事务；rsync RPO ≤5min | P1+P4 | 5 min |
+| 33 | §8.4 可观测性 | 新增 Worker 进程维度指标 | P1 | 5 min |
+| 34 | §8.5 容错性 | Worker 崩溃恢复简化 | P1 | 5 min |
+| 35 | §8.6 扩展性 | 横向扩展 = 加 Worker 进程或加电脑 | P1 | 5 min |
+| 36 | §8.7 容量规划 | Worker 规格 + 容量重新计算 | P1 | 10 min |
+| 37 | §9 技术约束 | Worker 启动参数 --adb-serial；移除 max_concurrent_devices | P1 | 5 min |
+| 38 | §10.1 功能验收 | 新增 AC-NEW-V14-001~005 | P1+P2+P3 | 15 min |
+| 39 | §10.2 非功能验收 | 更新 NAC-009/010；新增 NAC-V14-001/002 | P1+P2 | 10 min |
+| 40 | §10.3 测试策略 | Worker 多进程场景测试 | P1 | 5 min |
+| 41 | §10.4 存储测试 | DRBD 演练 → rsync 切换演练 | P4 | 5 min |
+| 42 | §11.1 风险 | 更新 Worker 相关风险 | P1 | 10 min |
+| 43 | §11.3 假设前提 | AS-010 更新 | P1 | 5 min |
+| 44 | §11.5 决策记录 | 新增 V1.4 决策表 | P1+P2+P3+P4 | 15 min |
+| 45 | §11.6 开放问题 | Q7/Q8 标 Review 阻塞；新增 Q20-Q23 | P7 | 10 min |
+| 46 | §12 发布变更 | V1.3.1.1 → V1.4 迁移计划 | P1 | 10 min |
+| 47 | §13 Runbook | 新增 RB-WORKER-MULTI-PROCESS | P1 | 5 min |
+| 48 | §14 开放问题 | 新增 V1.4 开放问题 | P1 | 5 min |
+| 49 | §15 关联文档 | 新增 V1.4 PRD 引用 | 元数据 | 5 min |
+
+**改动统计**：49 处修改 + 4 项架构级变更 + 3 项小修
+
+**autoplan 评审闭环统计**：
+- P1（Worker 1:1 进程模型）：27+ 处 ✓
+- P2（USB 带宽验证 + 降级）：3 处 ✓
+- P3（PENDING 超时）：5 处 ✓
+- P4（DRBD → rsync）：3 处 ✓
+- P5（OssSignedUrl 去重）：1 处 ✓
+- P6（Multipart 原子性澄清）：1 处 ✓
+- P7（开放问题阻塞项标记）：2 处 ✓
+
+**4 高危 + 3 小修 全部闭环。**
+
+**总工作量**：~5h
 
 ### 术语表
 
 | 术语 | 定义 |
 |------|------|
 | Transaction | 一次完整的保单录入事务，从资料提交到结果回传的全过程。**业务类型（NEW/RENEWAL）由用户在 Web/API 提交时显式指定**，错误指定由用户承担。 |
-| Worker | 安装在桌面端的客户端代理，**V1.2 起升级为"编排 + 执行"双重角色**：接收调度指令、编排 RPA 流程，**并通过 Airtest runtime 实际驱动 Android 设备执行 UI 自动化**。 |
-| Device | 挂载在 Worker 上的 Android 设备，**V1.2 起降级为"下载器 + ADB 目标"**：仅负责下载输入影像到本地沙箱 + 作为 ADB 控制目标，不再持有 Flow 脚本、不再执行 RPA 步骤。 |
+| Worker | 安装在桌面端的客户端代理，**V1.4 起调整为"单设备执行器"**：1 Worker 进程 = 1 Android Device，**通过 Airtest runtime 驱动绑定的单台设备执行 UI 自动化**。同台电脑可启动 2-3 个 Worker 进程，各自独立运行。**V1.2 起"编排 + 执行"双重角色中的"编排"由调度中心承担，Worker 专注单设备执行**。 |
+| Device | 挂载在 Worker 上的 Android 设备，**V1.2 起降级为"下载器 + ADB 目标"**：仅负责下载输入影像到本地沙箱 + 作为 ADB 控制目标，不再持有 Flow 脚本、不再执行 RPA 步骤。**V1.4 起 Device 与 Worker 为 1:1 绑定关系**。 |
 | **Airtest** | **V1.2 新增术语**。开源移动端 UI 自动化框架（基于图像识别 + 控件识别 + ADB），本项目用其驱动 Android 设备 UI 操作。设计哲学为"桌面 Python 控制手机"。 |
 | **POCO** | **V1.2 新增术语**。Airtest 配套的跨平台 UI 控件识别库，支持 Android/iOS/Web。本项目用其做 Android 控件树查询与操作。 |
 | **ADB** | **V1.2 新增术语**。Android Debug Bridge，Android 官方调试桥。本项目用其做 USB 设备连接、Shell 命令、文件传输。 |
 | **adb_serial** | **V1.2 新增字段术语**。Android 设备 USB ADB 序列号，Worker 通过此值连接 ADB。 |
 | **sandbox_path** | **V1.2 新增字段术语**。Device 端临时沙箱路径，默认 `/sdcard/sandbox/{txn_id}/`，用于存储下载的输入影像。 |
-| **max_concurrent_devices** | **V1.2 新增字段术语**。Worker 端最大并发 Device 数，受 CPU 限制默认为 2-3。 |
+| **max_concurrent_devices** | **DEPRECATED（V1.4 起）**。V1.2/V1.3.1 时期 Worker 端最大并发 Device 数字段（受 CPU 限制默认为 2-3）。V1.4 起 1 Worker = 1 Device 进程模型不再需要该字段，保留以兼容历史数据。 |
+| **bound_device_id** | **V1.4 新增字段术语**。Worker 进程绑定的 Device ID（1:1 关系）。Worker 启动时通过 `--adb-serial` 参数绑定 1 台 Android 设备，bound_device_id 与 Device.adb_serial 对应。 |
+| **Worker 进程组** | **V1.4 新增术语**。同一台电脑上运行的 2-3 个 Worker 进程集合。共享同一物理 USB 集线器但各自独立连接一台设备；进程间无通信，各自与 Backend 通信。 |
+| **PENDING_TIMEOUT（V1.4 新增）** | 状态机子状态。事务在 PENDING 状态超过 10 分钟（可配置）未被调度，自动转为 PENDING_TIMEOUT。**非终态**：设备可用时自动恢复 PENDING → DISPATCHED。用于向用户反馈"当前无可用设备"而非无限等待。 |
 | **download-ack** | **V1.2 新增接口术语**。Device 完成输入影像下载后调用 `POST /api/v1/devices/{id}/download-ack` 通知 Worker。 |
 | Flow | 一个完整的 RPA 流程定义，由多个有序 Step 组成 |
 | FlowVersion | Flow 的版本记录，包含脚本包和参数，支持多版本共存与回滚 |
@@ -109,7 +274,7 @@
 | OssSignedUrl | **DEPRECATED（V1.3 起）**。**V1.3 之前**的 OSS 对象临时签名 URL 记录。V1.3 起被通用 `DownloadUrl` 实体替代（后端无关的下载凭证），保留表结构不删除以兼容历史引用。 |
 | **DownloadUrl（V1.3 新增）** | **通用下载凭证实体**。Backend 生成的临时签名 URL（TTL 5 分钟），供 Device 直连下载。后端实现基于 `StorageBackend.generate_signed_url()`，默认 `LocalStorageBackend` 返回的是 Backend 自身服务的 URL（指向 `/api/v1/downloads/{token}`），未来切换 OSS 后端时自动返回 OSS 签名 URL。生成后由 Backend 通过 `POST /api/v1/transactions/{id}/download-urls` 下发，不经 Worker 中转。 |
 | **StorageBackend（V1.3 新增）** | **文件存储后端抽象接口**。统一封装 `put` / `get` / `generate_signed_url` / `delete` / `exists` 等操作。V1.3 默认实现 `LocalStorageBackend`（本地文件系统），未来可扩展 `OssStorageBackend`（阿里云 OSS）、`MinioStorageBackend`（S3 兼容）。后端通过配置选择当前实现，业务代码不感知具体后端。 |
-| **LocalStorageBackend（V1.3 新增）** | **本地文件存储后端实现**（V1.3 MVP 默认）。文件存储于 Backend 主机本地文件系统，默认路径 `/data/attachments/{attachment_id}/{filename}`。签名 URL 指向 Backend 自身服务，Device 通过 `GET /api/v1/downloads/{token}` 下载。 |
+| **LocalStorageBackend（V1.3 新增，V1.3.1 修订）** | **本地文件存储后端实现**（V1.3 MVP 默认）。文件存储于 Backend 主机本地文件系统，默认路径 **`/data/attachments/{customer_id}/{attachment_id}/{filename}`（V1.3.1 修订，加入 customer_id 多租户隔离）**。签名 URL 指向 Backend 自身服务，Device 通过 `GET /api/v1/downloads/{token}` 下载。 |
 | **OssStorageBackend（V1.3 新增，中期实现）** | **阿里云 OSS 存储后端实现**。通过阿里云 OSS SDK 封装 `StorageBackend` 接口。签名 URL 由 OSS 生成（5 分钟 TTL），Device 通过 OSS 域名直连下载。 |
 | KMS | **新增（V1.1）**。Key Management Service，密钥管理服务。手机号/身份证号等敏感字段加密密钥由 KMS 托管，权限按角色隔离。 |
 | RedisStream | **新增（V1.1）**。基于 Redis Stream + Consumer Group 的任务队列。**MVP 必需**，替代原"DB 轮询"作为唯一调度方案。 |
@@ -139,7 +304,11 @@
   - **桌面 IDE 断点调试便利**：Flow 脚本在 Worker 桌面 Python 进程执行，可直接用 PyCharm/VSCode 断点调试，降低 RPA 维护成本
   - **脚本热更新免下发**：Flow 脚本不再下发到 Device，改完直接重启 Worker 即可生效，版本一致性风险归零
   - **Device Agent 极简化**：Device 端不再需要 Airtest runtime，App 包大小从 ~50MB 降至 ~5MB
-- **V1.2 重要假设：** "5-8 分钟" **仅指 RUNNING 阶段（Worker 端 Airtest 自动化执行时间）**，**不含**任何用户等待时间。原 V1.0 中的 CONFIRM Step（最长 30 分钟确认等待）已在 V1.1 移除，改为"全自动 + 异步审计"模式。
+- **V1.4 新增价值（1:1 进程模型带来）**：
+  - **ATT 确定性提升**：1 Worker = 1 Device 进程独占 Airtest runtime（无 Python GIL 轮转），5-8min ATT 估算从"假设"变为"可观测"
+  - **进程崩溃隔离**：单个 Worker 进程崩溃只影响 1 个事务（V1.2 时期 1 Worker 挂 = 2-3 事务中断）
+  - **独立重启能力**：可单独重启某个 Worker 进程而不影响同台电脑上的其他 Device
+- **V1.2 重要假设：** "5-8 分钟" **仅指 RUNNING 阶段（Worker 端 Airtest 自动化执行时间）**，**不含**任何用户等待时间。原 V1.0 中的 CONFIRM Step（最长 30 分钟确认等待）已在 V1.1 移除，改为"全自动 + 异步审计"模式。**V1.4 起**，由于 1:1 进程模型消除了 GIL 轮转延迟，5-8min ATT 在正常情况下更接近上界 8min。
 
 ### 1.4 范围边界
 
@@ -152,7 +321,8 @@
 | **ADB 连接管理（USB 物理连接，V1.2 新增）** | 支付/出单环节 |
 | 全链路状态监控与审计日志 | 业务类型的智能识别 |
 | **业务类型的提交时指定（V1.1 明确）** | **业务类型的智能识别（V2.x 规划）** |
-| **单 Worker 限 2-3 Device（V1.2 新增约束）** | **多 Worker 负载均衡（V1.2 由云端调度中心承担）** |
+| **单 Worker = 单 Device，1:1 进程绑定（V1.4 调整为 1:1 进程模型）** | **单 Worker 多 Device 进程内并发（V1.4 已废止，GIL 限制不可行）** |
+| **同台电脑可启动 2-3 个 Worker 进程（V1.4 新增）** | **跨电脑 Worker 自动迁移（V1.x 暂不支持，靠手动部署）** |
 | **文件存储后端可插拔（V1.3 新增）** | **存储后端用户侧不可见（V1.3 由 Backend 抽象）** |
 
 **V1.1 范围说明。** 业务类型（NEW/RENEWAL）由用户在 Web/API 提交事务时显式指定，系统按配置规则路由到对应 Flow。V1.x 不实现自动识别能力（依赖 OCR 等外部服务）。V2.x 规划智能识别能力。
@@ -160,6 +330,11 @@
 **V1.2 范围补充。** 执行架构从"Device 端 Airtest + Worker 编排"调整为"Worker 端 Airtest + Device 极简化"。由此引入两个新约束：
 - **单 Worker 同时挂载的 Device ≤ 3 台**（CPU 瓶颈，Airtest 进程 + 图像处理压力大）
 - **单站点推荐配置 2-3 个 Worker，共 4-9 台 Device**（覆盖 500 笔/日的事务量）
+
+**V1.4 范围补充。** Worker 并发模型从"单进程 1:N（1 Worker 挂 2-3 Device）"调整为"1:1 进程模型（1 Worker 进程 = 1 Device）"：
+- **单 Worker 进程绑定 1 台 Device**（启动时通过 `--adb-serial` 参数绑定，进程崩溃爆炸半径缩为 1 事务）
+- **同台电脑可启动 2-3 个 Worker 进程**（共享 USB 集线器但各自独立连接 1 台 Device；进程间无通信）
+- **单站点推荐配置 2-3 台电脑，每台 2-3 个 Worker，共 4-9 台 Device**（覆盖 500 笔/日的事务量）
 
 **V1.3 范围补充。** 文件存储架构从"OSS-first"翻转为"Server-first"：
 - **MVP（V1.3）：** 客户端通过 multipart/form-data 一并上传文件，Backend 落地到本地文件系统（`LocalStorageBackend`）；下载通过 Backend 自身提供的签名 URL 直连（不依赖 OSS）
@@ -177,8 +352,8 @@
 | 销售人员 | 提交投保资料的业务人员 | 提交保单资料（Web/API）、查看**自有**事务状态 |
 | 运维管理员 | 监控系统运行状态的运维人员 | 查看 Dashboard、管理设备池、处理 DLQ 事务 |
 | 系统管理员 | 系统配置与权限管理 | 管理用户/角色、配置校验规则、管理 Flow 定义 |
-| Worker 节点 | 桌面端客户端代理（系统角色） | **V1.2 升级**：注册/心跳、接收任务、**编排 + 执行**（通过 Airtest runtime 驱动 Android 设备）、上报结果 |
-| Android 设备 | 移动端执行代理（系统角色） | **V1.2 降级**：仅下载输入影像（直连 OSS 签名 URL）+ 作为 ADB 控制目标（**不再持有 Flow 脚本、不再执行 RPA 步骤**） |
+| Worker 节点 | 桌面端客户端代理（系统角色） | **V1.4 调整为单设备执行器**：注册/心跳、接收任务、**单设备执行**（通过 Airtest runtime 驱动绑定的 1 台 Android 设备）、上报结果。**1 Worker 进程 = 1 Device**，同台电脑可启动 2-3 个 Worker 进程 |
+| Android 设备 | 移动端执行代理（系统角色） | **V1.2 降级**、**V1.3 修订**、**V1.4 绑定 1:1**：仅下载输入影像（**直连 Backend 签名 URL，V1.3 起不再走 OSS**）+ 作为 ADB 控制目标（**不再持有 Flow 脚本、不再执行 RPA 步骤**）。**V1.4 起 1 Device 绑定 1 Worker 进程** |
 | **数据主体（V1.1 新增）** | 自然人/投保人 | 通过 DPoP API 查询/更正/删除/导出自身数据 |
 
 ### 2.2 权限矩阵
@@ -194,7 +369,7 @@
 | 配置校验规则 | - | - | Y | - | - | - |
 | 管理 Flow 定义 | - | - | Y | - | - | - |
 | 注册/心跳 | - | - | - | Y | - | - |
-| 接收/执行任务 | - | - | - | Y（**V1.2 升级：编排 + 执行**） | Y（**V1.2 降级：仅下载 + ADB 目标**） | - |
+| 接收/执行任务 | - | - | - | Y（**V1.4 单设备执行器：1 Worker = 1 Device**） | Y（**V1.2 降级：仅下载 + ADB 目标；V1.4 起绑定 1 Worker**） | - |
 | 下载影像资料 | - | - | - | - | Y | - |
 | 查看 Dashboard | - | Y | Y | - | - | - |
 | **行使 DPoP 权利（V1.1）** | - | - | Y | - | - | Y |
@@ -215,7 +390,7 @@
 | **审计日志保留** | 合规审查可还原 | 审计日志保留期 ≥180 天（PIPL 推荐），与保险数据保留期分别管理 |
 
 **分阶段策略（V1.1 共识会决议 P5）。**
-- **MVP（V1.1）覆盖：** PIPL 第二十四条（单独同意）、KMS 密钥管理、OSS 地域约束、审计日志 180 天
+- **MVP（V1.1）覆盖：** PIPL 第二十四条（单独同意）、KMS 密钥管理、**存储后端地域约束（V1.3 修订，原"OSS 地域约束"扩展为通用存储后端地域）**、审计日志 180 天
 - **中期（V1.2-V1.3）补：** 《保险法》10 年保存、DPoP 完整接口、保险法对应的存储架构变动
 
 **数据加密策略。**
@@ -234,13 +409,13 @@
 ```
 销售人员提交资料(指定业务类型, multipart含文件) → [事务接入] → 智能路由(按权重) → Schema校验
     → Backend落地文件到存储后端（V1.3 默认 LocalStorageBackend）
-    → 生成Transaction ID + Attachment ID → [调度中心] → 选择Worker+Device
-    → 状态: DISPATCHED → Worker接收任务 → 启动Airtest runtime
-    → 状态: ADB_CONNECTING (Worker通过USB ADB连接Device)
+    → 生成Transaction ID + Attachment ID → [调度中心] → 选择 ONLINE + 空闲的 Worker（1:1 绑定 1 Device）
+    → 状态: DISPATCHED → 对应 Worker 接收任务（该 Worker 已绑定 1 台 Device）
+    → 状态: ADB_CONNECTING (Worker通过USB ADB连接其绑定的Device)
     → 调用 /download-urls API获取下载URL（V1.3：指向后端自身；V1.4+ OSS 后端：指向 OSS）
     → Socket通知Device下载（Device直连下载源）
     → 状态: DOWNLOADING → 下载完成 → 状态: READY
-    → 状态: RUNNING → Worker Airtest执行Step序列
+    → 状态: RUNNING → Worker Airtest执行Step序列（单进程独占，无 GIL 轮转）
     → 执行完成 → 结果回传
     → 状态: SUCCESS/FAIL → 失败进DLQ运维兜底 → 销售人员查看结果
 ```
@@ -260,6 +435,8 @@
 - **文件存储后端 Server-first**：客户端 multipart 一并上传，Backend 落地存储（默认本地）；Device 仍直连下载源（**URL 来源从 OSS 变 Backend 自身**）
 - **`StorageBackend` 抽象**：未来切换 OSS/MinIO 不影响业务代码
 - **Device 端下载协议不变**：Device 仅感知"按 URL 下载"，URL 指向对 Device 透明
+
+**V1.3.1 交叉引用（B-3 闭环）。** 完整文件流（从客户端提交到 Device 下载落地）见 §5.4 存储数据流图。完整状态机见 §3.4 状态机。
 
 ### 3.2 新保单流程
 
@@ -292,19 +469,23 @@
 ### 3.4 状态机（V1.2 扩展：新增 ADB_CONNECTING + READY 子状态）
 
 ```
-PENDING → DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING → SUCCESS
+PENDING → PENDING_TIMEOUT (10min 未调度) → PENDING (设备可用时自动恢复)
+  │
+  ↓
+DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING → SUCCESS
                                               │                          → FAIL
                                               │                          → RETRY → RUNNING (最多N次)
                                               │                          → DLQ (终态失败，需人工介入)
                                               ↓
-                                        (download fail)
+                                         (download fail)
                                               → FAIL
 ```
 
 | 状态 | 触发条件 | 说明 |
 |------|----------|------|
 | PENDING | 事务创建，校验通过 | 等待调度 |
-| DISPATCHED | 调度中心分配 Worker+Device | 任务已下发 |
+| **PENDING_TIMEOUT（V1.4 新增）** | **PENDING 状态超过 10min（可配置）未被调度** | **新增**：非终态，通知用户"当前无可用设备"；设备可用时自动恢复 PENDING → DISPATCHED |
+| DISPATCHED | 调度中心分配 1 个 ONLINE 空闲 Worker（1:1 绑定 1 Device） | 任务已下发 |
 | **ADB_CONNECTING（V1.2 新增）** | **Worker 启动 Airtest runtime 并连接 Android USB ADB** | **新增**：ADB 握手阶段；失败 → FAIL |
 | DOWNLOADING | Device 开始下载影像资料 | 资料传输中 |
 | **READY（V1.2 新增）** | **Device 下载完成，Worker 准备执行 Airtest 流程** | **新增**：可选中间点 |
@@ -328,6 +509,7 @@ PENDING → DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING 
 - **RPA 步骤失败**：Step 级重试（按 Retry Policy），全部重试耗尽后事务 FAIL
 - **Worker 宕机**：服务端心跳超时检测，事务回退至 PENDING 重新调度
 - **Device 离线**：调度中心跳过该设备，重新选择可用设备
+- **PENDING 超时（V1.4 新增）**：单事务 PENDING 状态超过 10 分钟（可配置）未被调度中心分配到 Worker → 自动转为 PENDING_TIMEOUT，**通知用户**（"当前无可用设备，事务将在设备可用后自动执行"）；设备可用时自动恢复 PENDING → DISPATCHED。**PENDING_TIMEOUT 是非终态**，与 30min 事务级 DLQ 超时不冲突
 - **事务级超时（V1.1 新增）**：单事务从 PENDING 起超过 30 分钟（可配置）未到达终态（SUCCESS/FAIL），强制置为 DLQ；防止事务在 RUNNING 状态挂死占用设备
 - **OSS 签名 URL 过期**：Device 端发起续签请求（FR-MOB-006）；过期超过 3 次该事务置为 FAIL
 - **ADB 断开重连（V1.2 新增）**：Worker 检测 ADB 连接断开时执行 `adb reconnect offline` 重连；重连成功则继续执行；重连失败则事务回退 PENDING
@@ -342,12 +524,11 @@ PENDING → DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING 
 | 故障场景 | 业务影响 | 恢复顺序 |
 |----------|----------|----------|
 | 单 Worker 宕机 | 该 Worker 上的事务回退 PENDING 重新调度 | 自动（≤60s） |
-| **Worker 进程崩溃（V1.2 新增）** | **该 Worker 挂载的所有 Device 当前事务（2-3 个）回退 PENDING** | 自动（≤60s） |
+| **Worker 进程崩溃（V1.2 新增，V1.4 调整）** | **V1.4 起**：该 Worker 绑定的 1 个 Device 当前事务（1 个）回退 PENDING；**V1.2/V1.3.1 时期**：该 Worker 挂载的所有 Device 当前事务（2-3 个）回退 PENDING | 自动（≤60s） |
 | 站点全断（网络/电力） | 该站点所有 Worker 不可用，事务全量回退 PENDING | 自动，调度中心跳过该站点 |
 | 云端 Backend 单实例故障 | SLB 自动切流到健康实例 | 自动（≤30s） |
-| 云端 Backend 全部故障 | 销售可继续提交（写入 OSS 直传通道），Worker 任务排队等待恢复 | **半自动**：运维确认后人工恢复 |
-| 数据库主从切换 | 短时（≤30s）写入失败，事务提交重试 | 自动 |
-| OSS 不可用 | 影像上传和下载失败，所有事务 FAIL | **半自动**：运维确认后切备用 OSS 或重试 |
+| 云端 Backend 全部故障 | 销售可继续提交（写入 **Backend 暂存队列（V1.3 修订，原"OSS 直传通道"已废止）**），Worker 任务排队等待恢复 | **半自动**：运维确认后人工恢复 |
+| **OSS 不可用**（**V1.3 DEPRECATED 描述，保留兼容历史阅读**） | ~~影像上传和下载失败~~ | ~~半自动：运维切备用 OSS~~（**V1.3 起仅适用 OssStorageBackend 后端的 V1.4+ 场景，V1.3 默认 LocalStorageBackend 此条不适用**） |
 | **存储后端不可用（V1.3 新增，通用）** | **`StorageBackend` 故障（V1.3 默认 LocalStorageBackend：磁盘故障；V1.4+ OssStorageBackend：OSS 不可用）；事务提交 / 文件下载失败** | **半自动**：运维确认后切换后端（如 LocalStorageBackend → OssStorageBackend）或修复存储 |
 | **本地存储磁盘满（V1.3 新增）** | **新事务提交失败（507）** | **半自动**：运维清理过期文件 / 扩容磁盘 / 切换后端 |
 | KMS 不可用 | 敏感字段加解密失败，所有事务 FAIL | **半自动**：运维确认后重启 KMS Client |
@@ -369,9 +550,36 @@ PENDING → DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING 
 |------|------|
 | 描述 | 销售人员通过 Web 表单手动提交单笔保单资料 |
 | 输入 | 业务类型（新保/续保）、手机号、身份证号、影像文件（image/pdf，数量不限）；**V1.3 起**：文件通过 multipart/form-data 一并上传（V1.1/V1.2：先传 OSS 再传 file_url） |
-| 输出 | Transaction ID、提交时间戳、初始状态 PENDING；**V1.3 新增**：返回每个附件的 `attachment_id` |
-| 规则 | 文件大小单张 ≤10MB；图片格式 jpg/png/jpeg；PDF 单文件 ≤20MB；**V1.3 新增**：Backend 通过 `LocalStorageBackend`（默认）/ `OssStorageBackend`（未来）落地存储；multipart 总大小 ≤ 50MB；事务+文件原子性（任一校验失败回滚） |
-| 验收 | 提交成功返回 Transaction ID + attachment_id 列表；缺失必填项返回 400 错误且提示具体字段；**V1.3 新增**：存储后端不可用返回 507；事务+文件不一致返回 422 |
+| 输出 | Transaction ID、提交时间戳、初始状态 PENDING、每个附件的 `attachment_id`、**V1.4 新增：`estimated_wait`（后端估算的排队等待秒数）** |
+| 规则 | 文件大小单张 ≤10MB；图片格式 jpg/png/jpeg；PDF 单文件 ≤20MB；Backend 通过 `LocalStorageBackend`（默认）/ `OssStorageBackend`（未来）落地存储；multipart 总大小 ≤ 50MB；**事务+文件采用最终一致性模型（V1.4 澄清 P6 闭环）**：文件先落盘并通过 multipart 边界 + MD5 校验全部文件，**任一文件校验失败** → 标记已落地文件 `is_orphan=true`（不删除）→ 事务 FAIL 返回 422。**非数据库级分布式事务**；事务持久化与文件落地的最终一致由 FR-SVR-023 GC 兜底（孤儿文件 24h 内清理） |
+| 验收 | 提交成功返回 Transaction ID + attachment_id 列表 + estimated_wait；缺失必填项返回 400 错误且提示具体字段；存储后端不可用返回 507；事务+文件不一致返回 422 + error.type 分层（详见下表） |
+
+**V1.3.1 422 错误体分层**（B-2 闭环）：
+
+| `error.type` | 触发条件 | 客户端处理建议 |
+|--------------|----------|----------------|
+| `MULTIPART_PARTIAL_FAIL` | 5/6 成功 + 1 失败（部分落地 + 校验失败）| 重传整个事务 |
+| `MD5_MISMATCH` | 文件 MD5 与客户端声明不一致 | 重新计算 MD5 后重传该文件 |
+| `FILE_MISSING` | multipart 中声明附件数 ≠ 实际文件数 | 检查 multipart 完整性后重传 |
+| `CUSTOMER_MISMATCH` | 事务 customer_id 与 attachment.customer_id 不一致 | 确认多租户上下文后重传 |
+| `CUSTOMER_NOT_ALLOWED` | 跨 customer_id 访问（token claim 不匹配）| 业务系统错误，禁止重试 |
+| `REFRESH_EXCEEDED` | URL 续签次数 > 3 | 事务 FAIL，不再重试 |
+
+**422 响应体示例**：
+```json
+{
+  "code": 422,
+  "error": {
+    "type": "MULTIPART_PARTIAL_FAIL",
+    "message": "5 of 6 files uploaded, transaction failed",
+    "details": {
+      "uploaded": ["ATT-001", "ATT-002", "ATT-003", "ATT-004", "ATT-005"],
+      "failed": ["ATT-006"],
+      "cleanup_status": "is_orphan=true, GC scheduled in 24h"
+    }
+  }
+}
+```
 
 #### FR-SVR-002 REST API 批量推送（V1.3 改 multipart 上传）
 
@@ -571,6 +779,16 @@ PENDING → DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING 
 | 规则 | ADB 状态变化时立即上报；连续 3 次心跳未上报视为 USB 物理断开 |
 | 验收 | Dashboard 30s 内可见 ADB 状态变化；DISCONNECTED 触发事务回退 |
 
+#### FR-SVR-023 存储对象 GC（V1.3.1 新增，P6 闭环）
+
+| 字段 | 内容 |
+|------|------|
+| 描述 | 定期清理孤儿 / 过期存储对象，避免 LocalStorageBackend 磁盘膨胀 |
+| 输入 | cron 触发（每日凌晨 3:00） |
+| 输出 | 清理报告（清理对象数 / 释放空间大小） |
+| 规则 | 1. **孤儿对象清理**（P6 闭环）：事务 FAIL 但已落地的文件，标记 `is_orphan = true`（Multipart 失败时由 FR-SVR-001 流程标记），GC 任务清理早于 24h 前的孤儿；2. **过期对象清理**：事务终态后 > 7 天的对象可清理（仅清文件，保留 metadata）；3. **保留期对象**：FR-SVR-019 失败回滚标记的对象延长保留至 30 天；4. **Dry-run 模式**：默认 Dry-run 30 天，输出待清理清单供运维确认 |
+| 验收 | GC 任务每日执行；Dry-run 模式生成报告；非 Dry-run 模式清理后磁盘使用率下降；保留期内对象不被清理 |
+
 
 ### 4.2 客户端功能（FR-CLI-xxx）
 
@@ -579,19 +797,19 @@ PENDING → DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING 
 | 字段 | 内容 |
 |------|------|
 | 描述 | 客户端启动时向服务端注册 |
-| 输入 | 本机指纹（MAC/主机名/CPU序列号哈希）、版本号、已连接 Android 设备列表（含每台的 `adb_serial`，V1.2 新增） |
-| 输出 | 服务端返回的 Worker ID、Token |
-| 规则 | Token 有效期 24h，自动续期；注册失败重试 3 次后退出 |
-| 验收 | 首次启动注册成功；重启后保持原 Worker ID |
+| 输入 | 本机指纹（MAC/主机名/CPU序列号哈希）、版本号、**V1.4 调整**：**绑定的 1 台 Android 设备的 `adb_serial`（启动时通过 `--adb-serial` 参数传入，1:1 绑定）**；**V1.2 旧版**：已连接 Android 设备列表（含每台的 `adb_serial`） |
+| 输出 | 服务端返回的 Worker ID、Token、bound_device_id |
+| 规则 | Token 有效期 24h，自动续期；注册失败重试 3 次后退出；**V1.4 起**：`--adb-serial` 必须对应 Backend 中已存在的 Device 记录；不一致则注册失败；同台电脑启动多个 Worker 需指定不同端口（`--port`，默认 8765） |
+| 验收 | 首次启动注册成功；重启后保持原 Worker ID；bound_device_id 与 adb_serial 一致 |
 
 #### FR-CLI-002 状态同步
 
 | 字段 | 内容 |
 |------|------|
-| 描述 | 周期性上报本机及挂载设备的健康度 |
-| 输入 | 本机 CPU/内存/磁盘、设备电量/存储/锁屏状态、**ADB 连接状态（V1.2 新增）** |
+| 描述 | 周期性上报本机及绑定设备的健康度 |
+| 输入 | 本机 CPU/内存/磁盘、**V1.4 调整**：绑定的 1 台 Device 的电量/存储/锁屏状态、ADB 连接状态 |
 | 输出 | 心跳包（含上述指标） |
-| 规则 | 心跳间隔 30s；指标异常（如设备电量<20%）触发告警；心跳包中携带本地已缓存 Flow 版本信息，服务端据此判断是否有新版本需要下载；**V1.2 新增**：心跳包上报当前挂载 Device 数（≤ max_concurrent_devices） |
+| 规则 | 心跳间隔 30s；指标异常（如设备电量<20%）触发告警；心跳包中携带本地已缓存 Flow 版本信息，服务端据此判断是否有新版本需要下载；**V1.4 调整**：移除"当前挂载 Device 数"上报（始终为 1） |
 | 验收 | 服务端 Dashboard 实时反映客户端状态；服务端响应心跳中携带"有更新"标记，Worker 据此触发脚本下载 |
 
 #### FR-CLI-003 指令监听
@@ -606,7 +824,7 @@ PENDING → DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING 
 
 #### FR-CLI-004 数据拉取
 
-**【DEPRECATED，V1.1 起】** 影像文件下载已迁移至 Device 直连 OSS 签名 URL（FR-MOB-002 / FR-MOB-006）。Worker 不再持有影像字节流。本条仅作为历史引用保留，新实现不得参考。
+**【DEPRECATED，V1.1 起，V1.3 修订】** 影像文件下载已迁移至 Device 直连 **Backend 签名 URL（V1.3 起，原 OSS 路径已废止）**（FR-MOB-002 / FR-MOB-006）。Worker 不再持有影像字节流。本条仅作为历史引用保留，新实现不得参考。
 
 #### FR-CLI-004-Note（V1.1 替代方案，V1.2 更新）
 
@@ -624,15 +842,15 @@ Worker **不**再下载文件到本地沙箱、不再 AES-256 加密影像、不
 4. 等待 Device 通过 `POST /api/v1/devices/{id}/download-ack` 上报下载完成，进入 READY 状态
 5. 按 Step 顺序执行 Airtest API（详见 FR-CLI-005）
 
-#### FR-CLI-005 RPA 编排 + 执行器（V1.2 升级：从"编排"升级为"编排 + 执行"）
+#### FR-CLI-005 RPA 单设备执行器（V1.2 升级为"编排 + 执行" → V1.4 简化为"单设备执行器"）
 
 | 字段 | 内容 |
 |------|------|
-| 描述 | 编排 Flow → Steps 的执行流程，**V1.2 起 Worker 端通过 Airtest runtime 实际执行所有 Step** |
-| 输入 | Flow 定义（含 Steps 顺序、参数、Retry Policy） |
+| 描述 | 执行 Flow → Steps 的执行流程，**V1.4 起**：Worker 进程专注单设备执行（无设备调度逻辑），通过 Airtest runtime 实际驱动其绑定的 1 台 Android 设备。**V1.2/V1.3.1 时期**：Worker 编排 + 执行；**V1.4 起**："编排"由 Backend 调度中心承担，Worker 只做"执行" |
+| 输入 | Flow 定义（含 Steps 顺序、参数、Retry Policy）、bound_device_id（启动时绑定） |
 | 输出 | 各 Step 的执行结果、最终事务结果 |
-| 规则 | 支持 Step 级重试（默认 3 次，指数退避）；支持 Step 超时熔断（默认 60s/Step）；**V1.1 移除 CONFIRM Step 特殊处理**（遇到 CONFIRM 类型 Step 直接按普通 Step 执行，依赖 FR-SVR-018 失败截图兜底）；**V1.2 新增**：执行 Step.action_type → Airtest API 映射（OPEN_APP → start_app、INPUT → text、UPLOAD → touch(template) + 系统文件选择、CLICK → touch((x,y)) 或 touch(template)、SCREENSHOT → snapshot()、WAIT → sleep() 或 wait(template, timeout=)） |
-| 验收 | Flow 按定义顺序执行；任一 Step 失败触发重试；超时不阻塞整体流程；CONFIRM Step 退化为普通 Step 不再暂停；**V1.2 新增**：100% Step 在 Worker 端 Airtest runtime 中执行，Device 端不执行任何 RPA 步骤 |
+| 规则 | 支持 Step 级重试（默认 3 次，指数退避）；支持 Step 超时熔断（默认 60s/Step）；**V1.1 移除 CONFIRM Step 特殊处理**；**V1.2 新增**：执行 Step.action_type → Airtest API 映射（OPEN_APP → start_app、INPUT → text、UPLOAD → touch(template) + 系统文件选择、CLICK → touch((x,y)) 或 touch(template)、SCREENSHOT → snapshot()、WAIT → sleep() 或 wait(template, timeout=)）；**V1.4 新增**：1 Worker 进程 = 1 独立 Airtest runtime（无 GIL 轮转） |
+| 验收 | Flow 按定义顺序执行；任一 Step 失败触发重试；超时不阻塞整体流程；CONFIRM Step 退化为普通 Step 不再暂停；100% Step 在 Worker 端 Airtest runtime 中执行，Device 端不执行任何 RPA 步骤；**V1.4 新增**：Worker 进程崩溃仅影响当前 1 个事务（爆炸半径缩小） |
 
 #### FR-CLI-006 结果回传
 
@@ -799,7 +1017,7 @@ Worker **不**再下载文件到本地沙箱、不再 AES-256 加密影像、不
 | role_name | String(64) UK | 角色名 |
 | permissions | JSON | 权限列表 |
 
-#### Worker（桌面节点，V1.2 增 `max_concurrent_devices`）
+#### Worker（桌面节点，**V1.4 调整：移除 `max_concurrent_devices`，新增 `bound_device_id` 实现 1:1 绑定**）
 
 | 字段 | 类型 | 说明 | 变更 |
 |------|------|------|------|
@@ -811,8 +1029,10 @@ Worker **不**再下载文件到本地沙箱、不再 AES-256 加密影像、不
 | tags | JSON | 能力标签 | 不变 |
 | cpu_usage | Float | CPU 使用率 | 不变 |
 | memory_usage | Float | 内存使用率 | 不变 |
-| **max_concurrent_devices** | **Int** | **最大并发 Device 数（V1.2 新增；默认 3，受 CPU 限制）** | **新增** |
-| **current_device_count** | **Int** | **当前挂载 Device 数（V1.2 新增，从心跳包更新）** | **新增** |
+| **bound_device_id** | **String FK** | **绑定的 Device ID（V1.4 新增；1:1 关系；启动时通过 `--adb-serial` 绑定）** | **新增** |
+| **port** | **Int** | **Worker 进程监听端口（V1.4 新增；默认 8765；同台电脑多 Worker 用 8765/8766/8767）** | **新增** |
+| ~~max_concurrent_devices~~ | ~~Int~~ | ~~最大并发 Device 数（V1.2 字段；V1.4 起 DEPRECATED，1:1 模型不再需要）~~ | **DEPRECATED** |
+| ~~current_device_count~~ | ~~Int~~ | ~~当前挂载 Device 数（V1.2 字段；V1.4 起 DEPRECATED，始终为 1）~~ | **DEPRECATED** |
 | status | Enum | ONLINE/OFFLINE/BUSY | 不变 |
 | last_heartbeat_at | DateTime | 最后心跳时间 | 不变 |
 | registered_at | DateTime | 注册时间 | 不变 |
@@ -900,19 +1120,21 @@ Worker **不**再下载文件到本地沙箱、不再 AES-256 加密影像、不
 | ~~confirmed_by~~ | ~~String~~ | **DEPRECATED (V1.1)**：同上。 |
 | ~~confirmed_at~~ | ~~DateTime~~ | **DEPRECATED (V1.1)**：同上。 |
 
-#### Attachment（附件，V1.3 调整）
+#### Attachment（附件，V1.3 调整，V1.3.1 加 customer_id）
 
 | 字段 | 类型 | 说明 | 变更 |
 |------|------|------|------|
 | attachment_id | String PK | 附件 ID | 不变 |
 | transaction_id | String FK | 关联事务 | 不变 |
+| **customer_id** | **String(64) FK** | **租户 ID（V1.3.1 新增，P9 闭环；用于多租户隔离和 URL token claim）** | **新增** |
 | file_type | Enum | ID_CARD/DRIVING_LICENSE/CERTIFICATE/INVOICE/OTHER | 不变 |
 | description | String(128) | 用户对文件的描述/标签（如"身份证正反面合一"） | 不变 |
 | file_format | Enum | JPG/PNG/PDF | 不变 |
 | file_size | Long | 文件大小（字节） | 不变 |
 | **storage_backend** | **Enum** | **存储后端类型（V1.3 新增；`local` / `oss` / `minio`；V1.3 MVP 默认 `local`）** | **新增** |
-| **storage_path** | **String(512)** | **存储后端路径（V1.3 新增；如 `local://attachments/ATT-xxx/idcard.jpg` 或 `oss://bucket/key`）** | **新增（重命名自 storage_url）** |
+| **storage_path** | **String(512)** | **存储后端路径（V1.3 新增；V1.3.1 修订：实际路径含 customer_id：`local://attachments/{customer_id}/ATT-xxx/idcard.jpg`）** | **新增（重命名自 storage_url）** |
 | ~~storage_url~~ | ~~String~~ | **DEPRECATED (V1.3)**：V1.1/V1.2 用"OSS 路径"语义；V1.3 起被 `storage_backend` + `storage_path` 替代；保留字段以兼容历史数据 | **DEPRECATED** |
+| **is_orphan** | **Boolean** | **是否孤儿对象（V1.3.1 新增，P6 闭环；Multipart 失败时由 FR-SVR-001 标记；FR-SVR-023 GC 任务清理 24h+ 前的孤儿）** | **新增** |
 | md5 | String(32) | 文件 MD5 | 不变 |
 | uploaded_at | DateTime | 上传时间（V1.3 起：事务提交时间 + 文件落地时间） | 不变 |
 
@@ -985,19 +1207,6 @@ Worker **不**再下载文件到本地沙箱、不再 AES-256 加密影像、不
 | reason | String | 变更原因 |
 | occurred_at | DateTime | 变更时间 |
 
-#### OssSignedUrl（V1.1 新增）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| signed_url_id | String PK | 签名 URL 记录 ID（UUID） |
-| transaction_id | String FK | 关联事务 |
-| attachment_id | String FK | 关联附件（指向具体 OSS 对象） |
-| url | String(1024) | OSS 签名 URL（含签名参数） |
-| expires_at | DateTime | 过期时间（生成时 + 5min） |
-| created_at | DateTime | 创建时间 |
-| consumed_at | DateTime | 消费时间（Device 下载完成时间，可空） |
-| refresh_count | Int | 续签次数（默认 0，超过 3 该事务置 FAIL） |
-
 ### 5.3 实体关系图
 
 ```
@@ -1012,12 +1221,12 @@ Transaction ──1:N── Attachment
 Transaction ──1:N── StepExecution
 Transaction ──1:N── StateTransition
 Transaction ──1:N── AuditLog
-Transaction ──1:N── OssSignedUrl (V1.1 新增)
+Transaction ──1:N── OssSignedUrl (V1.1 新增, DEPRECATED)
 Flow ──1:N── FlowVersion
 Flow ──1:N── Step
 FlowVersion ──1:N── Step (via current_version binding on Step.flow_id+version)
 StepExecution ──N:1── Step
-Worker ──1:N── Device
+Worker ──1:1── Device (V1.4 调整，原 1:N；通过 bound_device_id 字段实现)
 ```
 
 **Mermaid 渲染版本（V1.1 新增，推荐使用）**：
@@ -1039,7 +1248,7 @@ erDiagram
     Flow ||--o{ FlowVersion : versions
     Flow ||--o{ Step : contains
     Step ||--o{ StepExecution : "executed as"
-    Worker ||--o{ Device : hosts
+    Worker ||--|| Device : "binds 1:1 (V1.4)"
 ```
 
 **V1.1 关系变化。**
@@ -1051,6 +1260,103 @@ erDiagram
 - `Device.adb_status` 新增字段（ADB 连接状态机）
 - `Worker.max_concurrent_devices` 与 `Worker.current_device_count` 新增字段
 - 实体关系不变
+
+**V1.4 关系变化。**
+- `Worker ──1:1── Device`（原 1:N）：通过 `Worker.bound_device_id` 与 `Device.device_id` 1:1 绑定
+- `Worker.max_concurrent_devices` / `Worker.current_device_count` 标 DEPRECATED
+- `Worker.bound_device_id` / `Worker.port` 新增字段
+
+**V1.3.1 关系变化。**
+- `Attachment.customer_id` 新增字段（多租户隔离，P9 闭环）
+- `Attachment.is_orphan` 新增字段（GC 任务识别孤儿，P6 闭环）
+- `DownloadUrl` 实体继承 V1.3 设计（V1.3.1 加 claim 字段约束）
+
+### 5.4 存储数据流图（V1.3.1 新增）
+
+完整的事务文件流（从客户端提交到 Device 下载）：
+
+```
+┌──────────┐  multipart  ┌────────────────────────────────────────────────────┐
+│  销售/    │  POST /tx  │  Backend                                          │
+│  第三方  │  ────────► │  ┌────────────────┐    ┌────────────────────┐  │
+│  系统    │  (含N文件) │  │ FR-SVR-001     │    │ FR-SVR-023 GC     │  │
+└──────────┘             │  │ multipart 解析 │    │ (cron 每日 3:00)  │  │
+                        │  └────────┬───────┘    └─────────┬──────────┘  │
+                        │           │                       │             │
+                        │           ▼                       │             │
+                        │  ┌────────────────────┐             │             │
+                        │  │ 事务级原子性校验   │             │             │
+                        │  │ 失败 → 5/6 成功   │             │             │
+                        │  │ 标记 is_orphan     │             │             │
+                        │  └────────┬───────────┘             │             │
+                        │           │ 成功                    │             │
+                        │           ▼                       │             │
+                        │  ┌────────────────────┐             │             │
+                        │  │ StorageBackend.put │             │             │
+                        │  │ (LocalStorageBackend)             │             │
+                        │  └────────┬───────────┘             │             │
+                        │           │                       │             │
+                        │           ▼                       │             │
+                        │  ┌────────────────────┐             ▼             │
+                        │  │ /data/attachments/ │   ┌────────────────────┐ │
+                        │  │ {customer_id}/     │   │ GC 任务:            │ │
+                        │  │ {attachment_id}/   │   │ 1. 找 is_orphan    │ │
+                        │  │ {filename}         │   │    > 24h 的        │ │
+                        │  │   (DRBD 同步到      │   │ 2. 找 7 天前       │ │
+                        │  │    Backend #2)      │   │    终态事务文件     │ │
+                        │  └────────────────────┘   │ 3. 删除 (Dry-run   │ │
+                        │                            │    30天)            │ │
+                        │                            └────────────────────┘ │
+                        └─────────────┬──────────────────────────────────────┘
+                                      │
+                                      │ 1. POST /tx/{id}/download-urls
+                                      ▼
+                        ┌────────────────────────────────────┐
+                        │ Backend 生成 DownloadUrl 记录     │
+                        │ url = base_url + sig(HMAC-SHA256) │
+                        │        + expires + device_id       │
+                        │        + attachment_id + customer  │
+                        │        claim + ttl=5min            │
+                        └────────────┬───────────────────────┘
+                                     │
+                                     │ 2. Socket :8765 DOWNLOAD_FILES
+                                     ▼
+                        ┌─────────────────────────────────────┐
+                        │ Worker (Airtest runtime)           │
+                        │ 收到 download_urls                   │
+                        │ 转发给 Device (经 USB 反向网络)      │
+                        └────────────┬────────────────────────┘
+                                     │
+                                     │ 3. Device 经 USB 反向网络
+                                     │    访问 localhost:8080/api/v1/downloads/{url_id}
+                                     ▼
+                        ┌─────────────────────────────────────┐
+                         │ Backend GET 端点                    │
+                         │ 1. 验证 HMAC 签名（§9.1.3）         │
+                         │ 2. 校验 claim 字段（device_id 等）  │
+                         │ 3. 校验未过期 + 未消费              │
+                         │ 4. 读取 /data/attachments/{customer_id}/{attachment_id}/{filename} │
+                         │ 5. 标记 consumed_at = NOW()         │
+                         │ 6. 返回文件二进制 + Content-MD5     │
+                        └────────────┬────────────────────────┘
+                                     │
+                                     │ 4. 写 Device /sdcard/sandbox/{txn_id}/
+                                     │    （事务完成时由 Worker 清理）
+                                     ▼
+                        ┌─────────────────────────────────────┐
+                        │ Device                              │
+                        │ 文件落地 → 目标保险 APP 可读取      │
+                        │ （被 Worker Airtest UI 操作触发）   │
+                        └─────────────────────────────────────┘
+```
+
+**关键不变量**：
+- 事务+文件原子性（5/6 失败 → 422 + `error.type=MULTIPART_PARTIAL_FAIL` + 孤儿标记）
+- 签名 URL 一次性消费（Device 二次下载 → 续签；续签超 3 → 422 + `error.type=REFRESH_EXCEEDED`）
+- 多租户隔离（customer_id 贯穿所有字段：Attachment / URL token claim / 存储路径）
+- 灾备同步（DRBD RPO=0，Backend #1 故障时 #2 接管）
+
+**V1.3.1 交叉引用（B-3 闭环）。** 上述文件流对应的状态机转换见 §3.4 状态机（PENDING → DISPATCHED → ADB_CONNECTING → DOWNLOADING → READY → RUNNING → SUCCESS/FAIL）。422 状态码 error.type 体系详见 §4.1 FR-SVR-001 验收。
 
 
 ---
@@ -1145,7 +1451,7 @@ Content-Type: image/jpeg
         "file_size": 1024000,
         "md5": "a1b2c3d4e5f6...",
         "storage_backend": "local",
-        "storage_path": "/data/attachments/ATT-20260605-00001/idcard.jpg"
+        "storage_path": "/data/attachments/customer-corp-001/ATT-20260605-00001/idcard.jpg"
       },
       {
         "attachment_id": "ATT-20260605-00002",
@@ -1154,7 +1460,7 @@ Content-Type: image/jpeg
         "file_size": 2048000,
         "md5": "d4e5f6a1b2c3...",
         "storage_backend": "local",
-        "storage_path": "/data/attachments/ATT-20260605-00002/license.jpg"
+        "storage_path": "/data/attachments/customer-corp-001/ATT-20260605-00002/license.jpg"
       }
     ]
   }
@@ -1189,8 +1495,8 @@ Authorization: Bearer {worker_token}
 **示例：GET /api/v1/downloads/{url_id}（V1.3 新增，Device 直连）**
 
 ```http
-GET /api/v1/downloads/DURL-20260605-00001?token={sig}&expires=1749050700
-Authorization: Bearer {device_token}  # 可选，URL 中的 token 即鉴权
+GET /api/v1/downloads/DURL-20260605-00001?token={sig}&expires=1749050700&device_id=DEV-SN12345&attachment_id=ATT-20260605-00001
+Authorization: Bearer {device_token}  # 可选，URL token 即鉴权（V1.3.1 起 token 含 device_id 绑定）
 
 响应:
 HTTP/1.1 200 OK
@@ -1201,12 +1507,59 @@ Content-MD5: a1b2c3d4e5f6...
 <binary file data>
 ```
 
+**示例：POST /api/v1/downloads/{url_id}/refresh（V1.3.1 新增，续签示例）**
+
+```http
+POST /api/v1/downloads/DURL-20260605-00001/refresh
+Authorization: Bearer {device_token}
+Content-Type: application/json
+
+{
+  "device_id": "DEV-SN12345",
+  "attachment_id": "ATT-20260605-00001"
+}
+
+响应（成功，200）:
+{
+  "code": 0,
+  "data": {
+    "url_id": "DURL-20260605-00001",
+    "signed_url": "https://api.example.com/api/v1/downloads/DURL-20260605-00001?token={new_sig}&expires={new_ts}&device_id=DEV-SN12345&attachment_id=ATT-20260605-00001",
+    "expires_at": "2026-06-05T10:15:00Z",
+    "refresh_count": 1
+  }
+}
+
+响应（device_id 不匹配，401）:
+{
+  "code": 401,
+  "message": "device_id mismatch"
+}
+
+响应（refresh_count 超过 3，422）:
+{
+  "code": 422,
+  "message": "refresh count exceeded, transaction will FAIL"
+}
+```
+
+**续签语义（P8 闭环）**：
+
+| 项目 | 详情 |
+|------|------|
+| 续签触发 | Device 检测 URL 即将过期（过期前 1min）时自动调用 |
+| 续签间隔 | 与原 URL 一致：5min TTL |
+| 续签上限 | 连续 3 次失败后该事务置 FAIL（与原 oss-urls refresh 一致） |
+| device_id 绑定 | 续签请求 body 必须含 `device_id`；Backend 校验与 token claim 一致；不一致返回 401 |
+| attachment_id 绑定 | 同上 |
+| claim 字段 | `url_id, expires_at, device_id, attachment_id, customer_id` |
+
 #### 6.2.2 调度接口
 
 | Method | Path | 描述 | 鉴权 |
 |--------|------|------|------|
-| POST | /api/v1/workers/register | Worker 注册 | 无（返回 Token） |
-| POST | /api/v1/workers/heartbeat | Worker 心跳（含 CPU/内存/Device 数/ADB 状态，V1.2 增强） | Worker Token |
+| POST | /api/v1/workers/register | Worker 注册（V1.4 调整：请求体必含 `adb_serial` + `port`） | 无（返回 Token） |
+| POST | /api/v1/workers/heartbeat | Worker 心跳（含 CPU/内存/绑定 Device 状态/ADB 状态，V1.4 移除 `current_device_count`） | Worker Token |
 | GET | /api/v1/workers | 查询 Worker 列表 | Admin Token |
 | GET | /api/v1/workers/{id} | 查询 Worker 详情 | Admin Token |
 | DELETE | /api/v1/workers/{id} | 下线 Worker | Admin Token |
@@ -1420,31 +1773,39 @@ Authorization: Bearer {device_token}
                            │
                     公网 / 专线 / VPN
                            │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
+           ┌────────────────┼────────────────┐
+           ▼                ▼                ▼
 ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
 │  本地站点 A     │ │  本地站点 B     │ │  本地站点 N     │
 │  (办公室/门店)  │ │  (办公室/门店)  │ │  (办公室/门店)  │
 │                │ │                │ │                │
 │ ┌────────────┐ │ │ ┌────────────┐ │ │ ┌────────────┐ │
-│ │ Worker#1   │ │ │ │ Worker#3   │ │ │ │ Worker#N   │ │
-│ │ (Desktop)  │ │ │ │ (Desktop)  │ │ │ │ (Desktop)  │ │
-│ │            │ │ │ │            │ │ │ │            │ │
-│ │ Airtest    │ │ │ │ Airtest    │ │ │ │ Airtest    │ │
-│ │ Runtime池  │ │ │ │ Runtime池  │ │ │ │ Runtime池  │ │
-│ │  ↑         │ │ │ │  ↑         │ │ │ │  ↑         │ │
-│ │  │ USB ADB │ │ │ │  │ USB ADB │ │ │ │  │ USB ADB │ │
-│ │  ↓         │ │ │ │  ↓         │ │ │ │  ↓         │ │
-│ │ ┌──┐ ┌──┐ │ │ │ │ ┌──┐ ┌──┐ │ │ │ │ ┌──┐ ┌──┐ │ │
-│ │ │A │ │B │ │ │ │ │ │C │ │D │ │ │ │ │ │E │ │F │ │ │
-│ │ └──┘ └──┘ │ │ │ │ └──┘ └──┘ │ │ │ │ └──┘ └──┘ │ │
-│ │ (极简Agent)│ │ │ │(极简Agent)│ │ │ │(极简Agent)│ │
+│ │Desktop #1  │ │ │ │Desktop #3  │ │ │ │Desktop #N  │ │
+│ │ (8C 16GB)  │ │ │ │ (8C 16GB)  │ │ │ │ (8C 16GB)  │ │
+│ │ ┌──┐┌──┐┌──┐ │ │ │ ┌──┐┌──┐┌──┐ │ │ │ ┌──┐┌──┐┌──┐ │ │
+│ │ │W1││W2││W3│ │ │ │ │W4││W5││W6│ │ │ │ │WN││..││..│ │ │
+│ │ │  ││  ││  │ │ │ │ │  ││  ││  │ │ │ │ │  ││  ││  │ │ │
+│ │ │AT││AT││AT│ │ │ │ │AT││AT││AT│ │ │ │ │AT││AT││AT│ │ │
+│ │ │8765││8766││8767│ │ │ │8765││8766││8767│ │ │ │8765││8766││8767│ │ │
+│ │ │  ││  ││  │ │ │ │ │  ││  ││  │ │ │ │ │  ││  ││  │ │ │
+│ │ │USB││USB││USB│ │ │ │USB││USB││USB│ │ │ │USB││USB││USB│ │ │
+│ │ └──┘└──┘└──┘ │ │ │ └──┘└──┘└──┘ │ │ │ └──┘└──┘└──┘ │ │
+│ │ │  ││  ││  │ │ │ │ │  ││  ││  │ │ │ │ │  ││  ││  │ │ │
+│ │ │A1││A2││A3│ │ │ │ │B1││B2││B3│ │ │ │ │Z1││Z2││Z3│ │ │
+│ │ │(极简)││(极简)││(极简)│ │ │ │(极简)││(极简)││(极简)│ │ │ │(极简)││(极简)││(极简)│ │ │
+│ │ └──┘└──┘└──┘ │ │ │ └──┘└──┘└──┘ │ │ │ └──┘└──┘└──┘ │ │
 │ └────────────┘ │ │ └────────────┘ │ │ └────────────┘ │
-│  N≤3 Device   │ │  N≤3 Device   │ │  N≤3 Device   │
+│  3 W × 1 D     │ │  3 W × 1 D     │ │  3 W × 1 D     │
+│  (1:1 进程模型) │ │  (1:1 进程模型) │ │  (1:1 进程模型) │
 └────────────────┘ └────────────────┘ └────────────────┘
 ```
 
 **V1.2 关键变化。** Worker 端新增 Airtest Runtime 池（V1.1 不存在）；Device Agent 极简化（无 Airtest runtime，包大小从 ~50MB 降至 ~5MB）。
+
+**V1.4 关键变化。** Worker 从"1 进程多 Device"改为"1 进程 1 Device"：
+- 每台 Desktop 启动 2-3 个 Worker 进程（W1/W2/W3），各自独立连接 1 台 Device（A1/A2/A3）
+- Worker 进程间无通信，各自与 Backend 通信
+- 进程崩溃爆炸半径从 2-3 事务缩小为 1 事务
 
 ### 7.2 部署拓扑
 
@@ -1459,13 +1820,13 @@ Authorization: Bearer {device_token}
 | 对象存储 | 云 OSS/COS | 存储影像附件，CDN 加速下载 |
 | 负载均衡 | 云 SLB/CLB | HTTPS 卸载，WebSocket 支持 |
 
-#### 本地部署（V1.2 调整）
+#### 本地部署（V1.2 调整，V1.4 改为 1:1 进程模型）
 
 | 节点类型 | 部署方式 | 说明 |
 |----------|----------|------|
-| **Worker 节点** | **本地桌面电脑（Linux/Windows）** | **V1.2 升级**：除 Python 环境外需安装 Airtest + pocoui 依赖；通过 USB 物理连接挂载 Device |
-| **Worker 硬件（V1.2 上调）** | **8C 16GB 100GB SSD** | **V1.2 由 4C 8GB 上调**：Airtest 进程 + 图像识别吃 CPU/内存 |
-| Android 设备 | USB 挂载于 Worker | **V1.2 简化**：中低端机型可（无 Airtest runtime 需求） |
+| **Worker 节点** | **本地桌面电脑（Linux/Windows）** | **V1.4 调整**：每台电脑启动 2-3 个 Worker 进程，各自独立运行；除 Python 环境外需安装 Airtest + pocoui 依赖；通过 USB 物理连接各自绑定 1 台 Device |
+| **Worker 硬件（V1.4 调整）** | **8C 16GB 100GB SSD**（每台电脑） | **V1.2 由 4C 8GB 上调**：3 个 Worker 进程 × Airtest runtime 仍吃 CPU/内存；**V1.4 起单 Worker 进程规格为 4C 8GB（虚拟切分），但物理上仍是 8C 16GB 整机** |
+| Android 设备 | USB 挂载于 Worker（1:1 绑定） | **V1.2 简化，V1.4 1:1 绑定**：中低端机型可（无 Airtest runtime 需求）；每台 Worker 进程通过 `--adb-serial` 绑定 1 台 Device |
 
 ### 7.3 网络架构（V1.2 调整：增加 USB ADB 段）
 
@@ -1494,7 +1855,8 @@ Authorization: Bearer {device_token}
 |------|------|------|------|------|
 | Web/API → SLB | HTTPS | 443 | 入站 | TLS 1.2+ |
 | Worker → SLB | HTTPS + WSS | 443 | 出站 | Worker 主动连云端，无需开放入站端口 |
-| Device → OSS | HTTPS | 443 | 出站 | Device 直接从 OSS 下载文件（V1.2 仍由 Device 直连，不经 Worker） |
+| ~~Device → OSS~~ | ~~HTTPS~~ | ~~443~~ | ~~出站~~ | **V1.3 废止**：V1.3 起 Device 不再直连 OSS，改经 USB 反向网络 → Worker → Backend（详见 §7.10） |
+| **Device → Backend（V1.3 新增）** | **HTTPS** | **443** | **出站（经 USB 反向网络）** | **V1.3 起**：Device 通过 USB ADB 反向网络访问 `localhost:8080/api/v1/downloads/{url_id}`，实际由 Backend 服务响应 |
 | Device → Worker | TCP Socket | 8765 | 局域网 | 本地指令通道（**V1.2 仅用于下载控制**） |
 | **Worker → Device** | **USB ADB** | **-** | **物理连接** | **V1.2 新增**：Worker 通过 USB ADB 驱动 Device UI 操作 |
 | Backend → RDS | TCP | 5432 | 内网 | 云内网通信 |
@@ -1524,12 +1886,13 @@ Authorization: Bearer {device_token}
 | ~~OSS~~ | ~~按量付费~~ | ~~-~~ | **V1.3 调整**：OSS 不再为 MVP 必需；未来切 `OssStorageBackend` 时再启用 |
 | SLB | 标准版 | 1 | HTTPS 卸载 |
 
-#### 本地站点资源（单站点最小配置，V1.2 调整）
+#### 本地站点资源（单站点最小配置，**V1.4 调整为 1:1 进程模型**）
 
 | 节点 | 规格 | 数量 | 说明 |
 |------|------|------|------|
-| **Worker 电脑** | **8C 16GB 100GB SSD**（V1.2 上调，原 4C 8GB） | **2-3**（V1.2 新增） | 每台 Worker 限挂载 2-3 Device |
-| **Android 设备** | **中低端可**（V1.2 下调，原中高端） | **4-9**（2-3 Worker × 2-3 Device） | 无 Airtest runtime 需求，硬件要求降低 |
+| **Worker 电脑（Desktop）** | **8C 16GB 100GB SSD** | **2-3** | 每台电脑跑 2-3 个 Worker 进程 |
+| **Worker 进程** | **4C 8GB（虚拟切分）/ 进程** | **2-3 / 电脑** | **V1.4 调整**：1 Worker 进程 = 1 Device（1:1 绑定），3 个进程独立运行；不再有"单进程挂多 Device"模型 |
+| **Android 设备** | **中低端可**（V1.2 下调，原中高端） | **4-9**（2-3 电脑 × 2-3 设备/电脑） | 无 Airtest runtime 需求，硬件要求降低 |
 | USB 数据线 | 优质（V1.2 强调） | 4-9 | 每台 Device 1 根；接触不良会导致 ADB 断开 |
 | 网络带宽 | ≥ 20Mbps 上行 | 1 | 确保文件上传和 WSS 通信稳定 |
 
@@ -1549,17 +1912,18 @@ Authorization: Bearer {device_token}
 
 #### 前期（MVP / 试运行阶段，V1.1 调整，V1.2 扩展）
 
-适用场景：≤ 5 个本地站点、≤ 50 台 Android 设备（V1.2 由 20 台上调）、日处理 ≤ 500 笔事务
+适用场景：≤ 5 个本地站点、≤ 50 台 Android 设备（V1.2 由 20 台上调；**V1.4 调整：50 台 = 50 个 Worker 进程，分布在 17-25 台电脑上**）、日处理 ≤ 500 笔事务
 
 | 组件 | 是否必需 | 说明 |
 |------|----------|------|
-| Backend 服务 | 必需 | 单实例或双实例 |
+| Backend 服务 | 必需 | 单实例或双实例（**V1.4 调整**：改回标准 K8s Deployment，不再用 StatefulSet） |
 | PostgreSQL | 必需 | 主存储（V1.1 起不再承担任务队列角色） |
 | **Redis Stream** | **必需（V1.1 升级）** | **任务队列 + 缓存**；Consumer Group 多副本调度中心天然支持 |
 | 对象存储 OSS | **V1.3 调整**：V1.3 MVP 不必需 | **V1.3 起**：MVP 阶段使用 `LocalStorageBackend`（Backend 主机本地 SSD），OSS 留作 V1.4+ 扩展后端；**V1.1 关键决策**（OSS-first 时代）已废止：原"OSS 桶需公网可访问"约束由"V1.3 Backend 服务需公网可访问（暴露 `/api/v1/downloads`）"替代 |
 | 负载均衡 SLB | 必需 | HTTPS 卸载 + WSS |
 | MQ | 可省略 | 暂用 Redis Stream 替代 |
-| **Airtest + pocoui（V1.2 新增）** | **Worker 端必需** | **Python ≥3.14 + airtest + pocoui 依赖** |
+| **Airtest + pocoui（V1.2 新增，V1.4 调整）** | **Worker 端必需** | **Python ≥3.14 + airtest + pocoui 依赖**；**V1.4 起每台电脑 2-3 个独立 Worker 进程**（无 GIL 轮转） |
+| **DRBD 灾备（V1.3.1 引入，V1.4 废止）** | **不采用** | **V1.4 起改 rsync + 手动切换**（详见 §7.9） |
 
 **V1.1 关键变化：** Redis Stream 从"中期可选"前移到"MVP 必需"。理由：
 - 避免原"DB 轮询 + 多副本调度"导致的事务重复分配事故
@@ -1589,7 +1953,7 @@ Authorization: Bearer {device_token}
 | Backend 实例 ≥ 3 副本 | 启用 WebSocket 粘性会话（SLB 配 cookie）或改用前端轮询 |
 | 需要异步事件总线（短信通知、外部系统对接） | 引入 MQ（RabbitMQ），与 Redis Stream 分工：Stream 任务队列、MQ 事件总线 |
 | 多 Backend 实例间需要共享限流状态 | Redis 升级（已有则无需） |
-| **单 Worker 满载仍不足（V1.2 新增）** | **按需扩容 Worker 数量；每站点 ≥ 4 个 Worker** |
+| **单 Worker 满载仍不足（V1.2 新增，V1.4 调整）** | **按需扩容 Worker 进程数（同电脑加进程到 3）或加电脑；每站点 ≥ 4 个 Worker 进程** |
 
 #### 后期（规模化阶段）
 
@@ -1617,25 +1981,190 @@ Authorization: Bearer {device_token}
 
 **异地容灾方案。** 单可用区故障时切换到同城备可用区（自动，< 5min）；城市级灾难时切换到异地只读副本（手动，< 1h）。**MVP 阶段**仅实施同城可用区方案，异地容灾进入 V1.3 规划。
 
+### 7.9 存储灾备设计（V1.3.1 新增，**V1.4 修订：DRBD → rsync**）
+
+V1.3 引入 `LocalStorageBackend`（文件存于 Backend 主机本地 SSD）。**V1.3.1 选定 DRBD active-passive + Pacemaker 作为灾备方案；V1.4 评审发现该方案运维复杂度过高**（K8s StatefulSet + Pacemaker + Corosync + DRBD 混搭，运维团队需同时理解两套集群管理），改为 MVP 用 **rsync 定期同步 + 手动切换**，中期业务量增长时直接切 **MinIO 集群**（V1.4+ 中期方案，详见末段）。
+
+**主推方案（MVP）：rsync 定期同步 + 手动切换**
+
+```
+┌─────────────────────┐     rsync 每 5min     ┌─────────────────────┐
+│  Backend #1 (Active) │◄════════════════════►│  Backend #2 (Standby)│
+│  /data/attachments    │   cron + inotify     │  /data/attachments   │
+│  LocalStorageBackend   │   RPO ≤ 5min         │  LocalStorageBackend   │
+│  K8s Deployment Pod 0 │                      │  K8s Deployment Pod 1 │
+└──────────┬──────────┘                        └──────────┬──────────┘
+           └────────────────► SLB ◄──────────────────────┘
+```
+
+**架构要点**：
+
+| 组件 | 配置 | 备注 |
+|------|------|------|
+| 同步方式 | `rsync -az --delete` cron 每 5 分钟 | **V1.4 新增**：在 Backend #2 上跑 cron，从 #1 拉取 `/data/attachments/` |
+| 数据盘 | 每 Backend 实例挂载独立云盘（ESSD PL1，1TB/实例） | 不使用共享块存储（避免 SPOF） |
+| 角色切换 | **手动**（运维确认后切 SLB 流量到 #2） | V1.4 简化：去掉 Pacemaker / Corosync |
+| 故障检测 | 监控告警 + 运维人工确认 | **V1.4 简化**：去掉 DRBD 内置心跳 + Pacemaker quorum |
+| 恢复点 RPO | **≤ 5 分钟**（最近 5 分钟内写入可能丢失） | V1.3.1 DRBD 方案 RPO=0，V1.4 放宽以简化运维 |
+| 恢复时间 RTO | **≤ 10 分钟**（手动确认 + SLB 切流） | V1.3.1 DRBD 方案 RTO ≤5min，V1.4 放宽 5min |
+
+**RTO / RPO 数字**：
+
+| 故障场景 | RPO | RTO | 切换流程 |
+|----------|-----|-----|----------|
+| Backend #1 整机故障 | **≤ 5min** | **≤ 10min** | 监控告警 → 运维人工确认 → SLB 切流到 #2 → #2 接管；最近 5min 数据可能丢失（rsync 间隔） |
+| Backend #1 进程崩溃（机器存活） | 0 | ≤ 30s | K8s 重启 Pod → 不切换数据盘 |
+| Backend #2 同步链路抖动 | 0 | ≤ 10min | rsync 自动 reconnect，重连后增量同步；不阻塞 #1 写入 |
+| 存储后端不可用（更高级别） | N/A | N/A | 业务暂停 → 运维修复或切 OssStorageBackend（V1.4+ 中期） |
+
+**K8s 部署约束**（**V1.4 简化：回到标准 Deployment**）：
+
+- Backend 改回 **Deployment**（不再 StatefulSet，**V1.3.1 引入、V1.4 废止**）
+- 每 Pod 独占 PVC（如 `local-storage-backend-0-pvc`），RWX 关闭
+- rsync cron 通过 `cronjob.yaml` 独立部署（不在 Backend Pod 内）
+- 无 init container 启动 DRBD
+
+**故障切换流程（手动）**：
+
+```
+1. 监控告警：Backend #1 健康检查连续 3 次失败
+2. 运维确认：人工查看 rsync 日志和监控指标
+3. SLB 切流：将 Backend Service 流量从 #1 切到 #2
+4. K8s Pod 保留：#1 修复后重新加入集群
+5. 数据回追（可选）：#1 修复后反向 rsync 从 #2 拉回最新数据
+6. 记录事件：写入 runbook
+```
+
+**rsync 脚本示例**：
+
+```bash
+# 在 Backend #2 上的 cron（每 5 分钟）
+*/5 * * * * rsync -az --delete \
+  --exclude='*.tmp' \
+  backend1.internal:/data/attachments/ \
+  /data/attachments/ \
+  >> /var/log/rsync-attachments.log 2>&1
+```
+
+**定期演练**（**V1.4 调整**）：每月 1 次手工演练（选业务低峰期），验证：
+- SLB 切流 ≤ 1min
+- #2 接管后能正常服务下载
+- 数据完整性（rsync 同步延迟 ≤ 5min）
+
+**MVP 阶段特别说明**：
+
+- MVP（V1.4）使用 rsync + 手动切换，运维简单
+- 中期（V1.4+，业务量 > 2000 笔/日时）直接切 **MinIO 集群**（详见末段），跳过 DRBD
+- 切 MinIO 后 RPO=0（MinIO 多副本内置）/ RTO ≤ 1min（MinIO 集群自动恢复）
+
+**V1.4+ 中期方案：MinIO 集群**（V1.3.1 评审方案 B 备选，V1.4 提升为中期主推）
+
+当业务量超 2000 笔/日时（参考 §8.7 容量规划），`LocalStorageBackend` + rsync 的 RPO ≤ 5min 不可接受，直接切 MinIO：
+- MinIO 部署 3-4 节点集群，Erasure Coding 保证数据冗余
+- `StorageBackend` 实现改为 `MinioStorageBackend`（V1.3 已预留接口）
+- RPO=0（MinIO 多副本同步写入）/ RTO ≤ 1min（节点故障自动恢复）
+- 与 K8s 天然兼容，运维复杂度低于 DRBD
+
+**V1.4 决策理由**：
+- 运维团队同时维护 K8s 和传统 HA 集群（Pacemaker）成本高
+- rsync 5min RPO 在 MVP 业务量下可接受
+- 业务量增长时直接切 MinIO（V1.3 已预留 `MinioStorageBackend` 接口），跳过 DRBD
+- 与 K8s 部署模型一致，避免 StatefulSet + Pacemaker 混搭
+
+### 7.10 设备下载网络拓扑（V1.3.1 新增，**V1.4 修订：带宽目标 + 自动降级**）
+
+V1.3 PRD §3.1 说"Device 直连 Backend 下载"，但**未明确物理网络路径**。本节定义 Device → Backend 的下载连接方式。
+
+**主推方案：USB 反向网络**（Airtest 框架原生支持）
+
+```
+┌──────────┐ USB ADB ◄──────────┐
+│ Worker   │  (ADB 通道)         │ Backend 服务
+│ (Airtest │  (192.168.x.x)     │ 10.0.x.x
+│  runtime)│                     │ /api/v1/downloads
+└──────────┘                     └──────────┘
+        │
+        │ USB ADB
+        ▼
+   ┌──────────┐
+   │ Android  │
+   │ Device   │
+   └──────────┘
+```
+
+**关键点**：
+- Device 通过 USB ADB 物理连接到 Worker（已有连接）
+- Airtest 框架支持 `airtest.core.android.adb shell` 让 Device 访问 Worker 网络命名空间
+- Device 在 Airtest 启动后会自动配置 adb reverse 端口映射：`adb reverse tcp:8080 tcp:8080`
+- Device 实际访问 `http://localhost:8080/api/v1/downloads/...` 时，请求通过 USB 转到 Worker，再由 Worker（默认网关）转发到 Backend 服务
+- **零额外网络配置**（只要 Backend 服务在 Worker 可达的网络内）
+
+**备选方案：站点 VPN**（PPL VPN 网关 + 内网穿透）
+
+适用场景：Worker 与 Backend 跨 VPC / 跨地域，USB 反向网络带宽实测不达标时。
+
+**实施决策**（**V1.4 调整 P2 闭环**）：
+- **带宽目标**：≥ 3MB/s（V1.4 调整：原 V1.3.1 ≥5MB/s 缺乏实测数据；预生产基准测试 8MB 文件若 < 1MB/s 则判定不可用）
+- **MVP 选 USB 反向网络**（零成本，Airtest 框架原生支持）
+- **预生产基准测试**（部署前 1 周必做）：实测 1MB / 8MB / 20MB 文件下载带宽
+- **自动降级路径**：实测 8MB 文件 < 1MB/s → 切站点 VPN 备选方案
+
+**Android 版本兼容性清单（V1.3.1 新增，B-4 闭环，V1.4 增加带宽维度）**：
+
+`adb reverse` 在不同 Android 版本上的稳定性有差异，需在预生产环境验证：
+
+| 验证项 | 测试方法 | 通过标准 | 失败回退方案 |
+|--------|---------|---------|--------------|
+| Android 10 各 1 台 | `adb -s <serial> reverse tcp:8080 tcp:8080`，验证端口转发成功 | 端口转发成功 | 切站点 VPN |
+| Android 11 各 1 台 | 同上 | 同上 | 同上 |
+| Android 12 各 1 台 | 同上 | 同上 | 同上 |
+| Android 13 各 1 台 | 同上 | 同上 | 同上 |
+| **USB 2.0 速率测试**（V1.4 新增） | 下载 8MB 平均文件，验证耗时 | **≤ 8s（≥1MB/s）** | 切 USB 3.0 线材 |
+| **USB 3.0 速率测试**（V1.4 新增） | 同上，验证耗时 | **≤ 3s（≥3MB/s）** | 切站点 VPN |
+| **20MB 大文件速率测试**（V1.4 新增） | 下载 20MB 文件，验证耗时 | **≤ 7s（≥3MB/s）** | 切站点 VPN |
+| **Airtest adb reverse 行为** | 启动 Airtest runtime 后自动配置 adb reverse，验证能否自动恢复 | 自动恢复 | 手动 `adb reverse` 补救 |
+| USB 断开恢复 | 拔插 USB 验证 adb reverse 重新建立 | 自动恢复 | 重启 Airtest runtime |
+
+**实施时间点**：预生产环境（V1.4 部署前 1 周）完成全部验证。**任意 1 项带宽测试失败**（< 1MB/s）→ 切 §7.10 备选方案（站点 VPN）；**任意 1 项兼容性测试失败**（如 adb reverse 在某 Android 版本不工作）→ 切备选方案。
+
+### 7.11 多租户隔离（V1.3.1 新增，P9 闭环）
+
+V1.3 PRD §2.5 提到"客户指定地域"，但**未指定多客户共享 Backend 时的存储隔离**。本节定义多租户隔离。
+
+**租户边界**：单 Backend 实例可服务多个客户（按 `customer_id` 区分），存储路径必须带 customer_id 前缀。
+
+**Attachment 实体变更**：新增 `customer_id` 字段（V1.3.1 见 §5.2）。
+
+**URL token claim 包含 customer_id**（V1.3.1 §9.1.1）：URL 签名时绑定 customer_id，验证时严格匹配，防止跨客户访问。
+
+**执行路径**：
+```
+/data/attachments/{customer_id}/{attachment_id}/{filename}
+```
+
+**降级**（单客户场景）：customer_id 固定为 `default` 或业务主键值，不影响功能。
+
 ---
 
 
 ## 8. 非功能性需求
 
-### 8.1 性能（V1.2 调整）
+### 8.1 性能（V1.2 调整，V1.4 进一步收紧）
 
 | 指标 | 目标值 |
 |------|--------|
-| 单笔事务提交响应时间 | ≤ 500ms（**P95 ≤ 500ms，P99 ≤ 1s**，V1.1 加 P99） |
-| 任务调度延迟（PENDING → DISPATCHED） | ≤ 200ms（V1.1 调整） |
-| **ADB 握手延迟（V1.2 新增）** | **≤ 30s（DISPATCHED → ADB_CONNECTING → DOWNLOADING）** |
-| 文件下载速率（Device → OSS） | ≥ 5MB/s（局域网） |
+| 单笔事务提交响应时间 | ≤ 500ms（**P95 ≤ 500ms，P99 ≤ 1s**） |
+| 任务调度延迟（PENDING → DISPATCHED） | ≤ 200ms |
+| **PENDING → PENDING_TIMEOUT 超时**（**V1.4 新增**） | **10min（可配置）；超时后事务不丢失，设备可用时自动恢复** |
+| **ADB 握手延迟** | **≤ 30s（DISPATCHED → ADB_CONNECTING → DOWNLOADING）** |
+| **文件下载速率（V1.4 调整 P2 闭环）** | **≥ 3MB/s（USB 2.0 经 adb reverse；预生产基准测试 ≥1MB/s 为可用门槛，<1MB/s 切站点 VPN）** |
 | 单 Step 执行超时 | 默认 60s，可配置 |
-| **单事务全流程 ATT** | **≤ 8min（V1.2 调整：原 ≤ 5min；仅 RUNNING 阶段，V1.1 明确）** |
+| **单事务全流程 ATT** | **≤ 8min（仅 RUNNING 阶段；V1.4 起 1:1 进程模型无 GIL 轮转，5-8min 更接近上界 8min）** |
 | 系统并发事务处理能力 | ≥ 50 笔/分钟（单 Backend 实例） |
-| **单 Worker 并发 Device（V1.2 新增）** | **≤ 3 Device / Worker（CPU 瓶颈约束）** |
-| **单站点容量（V1.2 新增）** | **2-3 Worker × 2-3 Device = 4-9 Device/站点** |
-| **API 限流阈值（V1.2 调整）** | **销售 40次/min**（原 60/min，因 ATT 延长 50% 调降），API Token 600次/min |
+| **单 Worker 进程 Device 数（V1.4 调整）** | **= 1 Device / Worker 进程（1:1 绑定，启动时通过 `--adb-serial` 固定）** |
+| **单台电脑 Worker 进程数（V1.4 新增）** | **2-3 Worker 进程 / 电脑** |
+| **单站点容量（V1.4 调整）** | **2-3 电脑 × 2-3 Worker/电脑 = 4-9 Worker 进程 + 4-9 Device/站点** |
+| **API 限流阈值** | **销售 40次/min**，API Token 600次/min |
 
 ### 8.2 可用性
 
@@ -1643,11 +2172,13 @@ Authorization: Bearer {device_token}
 |------|--------|
 | Backend 服务可用性 | ≥ 99.9%（年停机 ≤ 8.76h） |
 | Worker 故障切换时间 | ≤ 60s（心跳超时检测 + 事务重新调度） |
-| **Worker 进程崩溃恢复（V1.2 新增）** | **≤ 60s（该 Worker 所有 Device 事务回退 PENDING）** |
+| **Worker 进程崩溃恢复（V1.4 调整）** | **≤ 60s（该 Worker 1 个事务回退 PENDING；V1.2 时期 2-3 事务）** |
 | 数据库 RPO | ≤ 1s（主从同步复制） |
 | 数据库 RTO | ≤ 5min |
+| **LocalStorageBackend RPO（V1.4 调整 P4 闭环）** | **≤ 5min（rsync 同步间隔；V1.3.1 DRBD 方案 RPO=0）** |
+| **LocalStorageBackend RTO（V1.4 调整）** | **≤ 10min（手动 SLB 切流；V1.3.1 DRBD 方案 ≤ 5min）** |
 | 文件下载断点续传恢复 | 网络恢复后自动续传，无需人工干预 |
-| **ADB 断开重连（V1.2 新增）** | **≤ 10s（`adb reconnect offline` 自动重连）** |
+| **ADB 断开重连** | **≤ 10s（`adb reconnect offline` 自动重连）** |
 
 ### 8.3 安全性
 
@@ -1662,7 +2193,7 @@ Authorization: Bearer {device_token}
 | API 防刷 | 按角色限流 + IP 黑名单机制 |
 | 日志脱敏 | 审计日志中敏感字段自动脱敏 |
 | 文件清理 | 事务终态后自动清理 Device 端影像文件（SUCCESS 立即清理，FAIL 保留 24h）；**V1.2 由 Worker 触发清理** |
-| **OSS 地域约束（V1.1 新增）** | **OSS 桶固定在客户指定地域，禁跨地域复制** |
+| **OSS 地域约束（V1.1 新增，V1.3 调整为"存储后端地域约束"）** | **V1.3 起废止**：存储后端地域由 §2.5 通用约束统一规定；**V1.3 默认 LocalStorageBackend**：Backend 主机部署在客户指定地域；**V1.4+ OssStorageBackend**：OSS 桶固定在客户指定地域，禁跨地域复制 |
 | **白名单 IP（V1.1 新增）** | **Device Socket 接口仅接受白名单 IP** |
 | **幂等键（V1.1 新增）** | **所有 POST 接受 Idempotency-Key，防重复提交** |
 
@@ -1696,6 +2227,10 @@ Authorization: Bearer {device_token}
 | **V1.2 新增指标** | `worker_adb_connected_count` | Worker 当前 ADB 连接成功的 Device 数 |
 | | `airtest_step_duration_seconds` | Airtest 步骤执行时长（区别于原有 step_duration） |
 | | `adb_reconnect_total` | ADB 重连累计次数 |
+| **V1.4 新增指标** | `worker_process_uptime_seconds` | Worker 进程运行时长（按 worker_id 维度；用于检测进程重启频率） |
+| | `pending_timeout_total` | 事务进入 PENDING_TIMEOUT 状态累计次数 |
+| | **V1.4 新增 `worker_count_per_host`** | **同台电脑上活跃 Worker 进程数（按 hostname 维度）** |
+| | **V1.4 新增 `usb_reverse_bandwidth_bytes`** | **USB adb reverse 通道实测带宽（直方图）** |
 | **V1.3 新增指标** | `storage_backend_total_bytes{backend}` | 存储后端总容量（按后端标签） |
 | | `storage_backend_used_bytes{backend}` | 存储后端已用容量 |
 | | `storage_backend_used_ratio{backend}` | 存储后端使用率（0-1） |
@@ -1728,11 +2263,14 @@ Authorization: Bearer {device_token}
 | **P1（V1.3 新增）** | **存储后端使用率 > 90% 持续 5min** | **立即** |
 | **P1（V1.3 新增）** | **`StorageBackend` 调用连续失败 3 次（put/get 不可用）** | **立即** |
 | **P3（V1.3 新增）** | **下载 URL 续签失败率 > 5%** | **30min 内**（**V1.3 由 OSS 续签升级为通用续签**） |
+| **P2（V1.4 新增）** | **PENDING_TIMEOUT 频率 > 5 次/小时（持续 30min 无可用设备）** | **5min 内** |
+| **P2（V1.4 新增）** | **USB adb reverse 带宽 P95 < 1MB/s 持续 5min** | **5min 内（触发切站点 VPN 评估）** |
+| **P2（V1.4 新增）** | **rsync 同步失败 > 3 次/小时** | **5min 内** |
 
 **Dashboard 面板。**
 - 实时概览（事务积压、设备在线率、成功率、ATT）
 - Worker 负载（CPU/内存/活跃事务，**V1.2 重点**：CPU 监控 + Device 挂载数）
-- 设备池（电量/存储/锁屏状态，**V1.2 新增**：ADB 连接状态）
+- 设备池（电量/存储/锁屏状态，**V1.2 新增**：ADB 连接状态；**V1.4 新增**：按 Worker 进程维度而非按 Device 维度，因为 1:1 绑定后两者等价）
 - 调度中心（队列深度/消费速率）
 - DLQ 列表（按失败原因分组）
 - 异常截图流（FR-SVR-018 推送）
@@ -1757,7 +2295,8 @@ Authorization: Bearer {device_token}
 | OSS 签名 URL 过期 | Device 端自动续签；连续 3 次失败该事务置 FAIL |
 | **ADB 断开重连（V1.2 新增）** | **`adb reconnect offline` 自动重连，≤ 10s；失败则事务回退 PENDING** |
 | **Airtest 步骤重试（V1.2 新增）** | **Step 失败自动重试 3 次（指数退避 1s/2s/4s）；耗尽后 Step FAIL** |
-| **Worker 进程崩溃恢复（V1.2 新增）** | **心跳超时 → 该 Worker 所有 Device 事务回退 PENDING** |
+| **Worker 进程崩溃恢复（V1.4 调整）** | **心跳超时 → 该 Worker 1 个事务回退 PENDING（V1.2 时期 2-3 事务）** |
+| **PENDING 超时（V1.4 新增）** | **PENDING 状态超过 10min → PENDING_TIMEOUT → 通知用户；设备可用时自动恢复** |
 | **USB 物理断开（V1.2 新增）** | **触发运维告警；事务回退 PENDING** |
 
 ### 8.6 扩展性
@@ -1765,7 +2304,7 @@ Authorization: Bearer {device_token}
 | 需求项 | 描述 |
 |--------|------|
 | 横向扩展 | Worker 节点即插即用，新增 Worker 自动注册并参与调度 |
-| **Worker 数量扩展（V1.2 调整）** | **单 Worker 受 CPU 限制 2-3 Device；横向扩展通过增加 Worker 数量实现** |
+| **Worker 数量扩展（V1.4 调整）** | **1 Worker 进程 = 1 Device（1:1 绑定）；横向扩展通过两种方式实现：①同台电脑增加 Worker 进程（最多 3 个，受 USB 集线器端口数限制）；②新增电脑+Worker 进程** |
 | Flow 可配置 | 新增保险产品流程只需定义 Flow + Steps，无需改代码 |
 | Schema 热更新 | 校验规则变更无需重启服务 |
 | 设备类型扩展 | 预留 iOS 设备接入能力（Device Controller 接口抽象） |
@@ -1779,7 +2318,7 @@ Authorization: Bearer {device_token}
 |------|------|----------|----------|----------|
 | **用户数** | 销售账号数 + 运维账号数 | ≤ 50 | ≤ 200 | ≤ 1000 |
 | **事务量** | 日提交事务数 | ≤ 500 | ≤ 2000 | ≤ 10000 |
-| **设备数** | 挂载 Android 设备数 | **≤ 50（V1.2 上调，原 ≤ 20）** | ≤ 100 | ≤ 200 |
+| **设备数** | 挂载 Android 设备数（= Worker 进程数，V1.4 1:1 模型） | **≤ 50（V1.2 上调；V1.4 起 = 17-25 台电脑 × 2-3 进程）** | ≤ 100 | ≤ 200 |
 | **存储增长** | 影像文件累计 | ≤ 500 GB | ≤ 2 TB | ≤ 20 TB |
 
 **资源-容量映射（V1.2 MVP 阶段）。**
@@ -1791,11 +2330,40 @@ Authorization: Bearer {device_token}
 | Redis（4GB） | 200 笔/分 | 内存 > 70% 或 Stream 待处理 > 1000 | 升级内存或 Cluster |
 | OSS | 按量付费 | 无硬上限 | - |
 | SLB | 无硬上限 | 带宽 > 80% | 升级带宽 |
-| **Worker（8C 16GB，V1.2 新增）** | **3 Device/Worker** | **CPU > 80% 持续 5min** | **新增 Worker 节点** |
-| **单站点容量（V1.2 新增）** | **2-3 Worker × 2-3 Device = 4-9 Device/站点** | **单 Worker CPU 持续 > 80%** | **新增 Worker 节点** |
+| **Worker 电脑（8C 16GB，V1.4 调整）** | **3 Worker 进程 × 1 Device = 3 Device/电脑** | **CPU > 80% 持续 5min** | **加电脑+Worker 进程（同电脑加进程到上限 3 个）** |
+| **单站点容量（V1.4 调整）** | **2-3 电脑 × 3 进程 × 1 Device = 6-9 Device/站点** | **单电脑 CPU 持续 > 80%** | **新增电脑+Worker 进程** |
 | **单事务 ATT（V1.2 新增）** | **5-8 分钟** | **持续 > 10 分钟** | **检查 Airtest 脚本 / 增加 Worker** |
+| **LocalStorageBackend 容量（V1.3.1 新增）** | **1TB SSD × 2 实例（P4 灾备方案 DRBD active-passive，RPO=0）** | **任一实例使用率 > 80%** | **扩容磁盘 / 切换 OssStorageBackend（V1.4+）** |
 
-**性能与容量的预算。** MVP 阶段在峰值时刻（早 9-10 点、午 2-3 点）需保证 50 笔/分 × 30min = 1500 笔事务可持续。资源-容量映射在峰值时刻留 30% 冗余。**V1.2 新增**：单事务 ATT 5-8 分钟（原 3-5 分钟），峰值时刻单 Worker 负载 ≤ 3 Device 时 CPU < 80%。
+**附件大小分布假设（V1.3.1 修订，P5 闭环）**：
+
+| 文件类型 | 平均大小 | 占比 | 来源（基于车险影像抽样） |
+|---------|---------|------|--------------------------|
+| 身份证（正反面合一） | 2 MB | 25% | 现场抽样均值 |
+| 行驶证 | 1.5 MB | 20% | 现场抽样均值 |
+| 车辆合格证 | 8 MB | 15% | 现场抽样均值 |
+| 购车发票 | 1 MB | 15% | 现场抽样均值 |
+| 车辆照片（多张） | 3 MB × 3 | 15% | 单事务 3-5 张 |
+| 其他（保单/签名图） | 0.5 MB | 10% | PDF/JPG 混合 |
+| **单事务均值** | **~8 MB** | 100% | 5-10 个文件综合 |
+
+**7 天保留语义（V1.3.1 明确，P5 闭环）**：
+
+事务完成后 7 天内**完整保留**（文件 + metadata）。7 天后：
+- **Attachment 实体**：保留 metadata（attachment_id / 事务关联 / MD5 / customer_id），用于审计和回查
+- **文件二进制**：可清理（GC），但**事务回查时若需查看原图，需从 metadata 触发对象重建**（V1.4+ 计划：cold storage 迁移）
+
+**业务量增长下的扩容触发（V1.3.1 新增）**：
+
+| 业务量 | 1TB SSD 撑多久 | 触发动作 |
+|--------|----------------|----------|
+| MVP 500 笔/日 × 8MB × 7 天 = **28 GB**（峰值 140 GB）| **~50 个月**（80% 阈值）| 无 |
+| 中期 2000 笔/日 × 8MB × 7 天 = **112 GB**（峰值 560 GB）| **~12 个月**（80% 阈值）| 升 2TB SSD 或切 OssStorageBackend |
+| 后期 10000 笔/日 × 8MB × 7 天 = **560 GB**（峰值 2.8 TB）| **不可行**（V1.3.1 必切 MinIO 或 OSS）| 切 MinIO 集群（V1.4+ 方案 B） |
+
+**性能与容量的预算。** MVP 阶段在峰值时刻（早 9-10 点、午 2-3 点）需保证 50 笔/分 × 30min = 1500 笔事务可持续。资源-容量映射在峰值时刻留 30% 冗余。**V1.2 新增**：单事务 ATT 5-8 分钟（原 3-5 分钟），峰值时刻单 Worker 负载 ≤ 3 Device 时 CPU < 80%。**V1.4 调整**：1 Worker 进程 = 1 Device（1:1 模型），单进程 CPU 不再因多设备轮转升压；峰值时刻单电脑 3 个 Worker 进程 × 1 Device 时 CPU < 80%。**V1.3.1 补充**：LocalStorageBackend 容量按"附件大小分布 × 7 天保留"测算，1TB SSD × 2 实例可撑 MVP 阶段 4 年。
+
+**V1.3.1 交叉引用（B-3 闭环）。** 容量预算与事务状态机（§3.4）的关联：峰值时刻 1500 笔事务中 RUNNING 状态的事务数 = 事务到达率 × ATT = 50 笔/分 × 8 min ≈ 400 并发事务。详情见 §3.4 状态机 + §3.5 异常分支。
 
 ---
 
@@ -1808,7 +2376,8 @@ Authorization: Bearer {device_token}
 | **POCO 库（V1.2 新增）** | **`pocoui`（≥ 1.0）— Airtest 配套 UI 控件识别库，Worker 端使用** |
 | **ADB 库（V1.2 新增）** | **`airtest.core.android.adb` — Airtest 封装的 ADB 客户端，用于 USB 设备连接、Shell 命令、文件传输** |
 | 通信协议 | 全链路 HTTPS/TLS 加密，API 携带 Token 鉴权 |
-| **USB ADB（V1.2 新增）** | **Worker 与 Device 间通过 USB ADB 物理连接；ADB 工具 ≥ 1.0.41** |
+| **USB ADB（V1.2 新增，V1.4 调整）** | **Worker 进程与 Device 间通过 USB ADB 物理连接（1:1 绑定）；ADB 工具 ≥ 1.0.41；启动参数 `--adb-serial` 指定绑定的 Device** |
+| **Worker 启动方式（V1.4 新增）** | **`3is-worker --adb-serial=<serial> [--port=8765]`；同台电脑可启动 2-3 个进程，端口递增（8765/8766/8767）** |
 | 配置管理 | 客户端与移动端配置（服务器地址、存储路径等）支持 YAML/JSON 文件配置，禁止硬编码 |
 | 数据库 | PostgreSQL（主存储）；Redis（可选，按业务规模引入） |
 | 消息队列 | RabbitMQ 或 Redis Stream（可选，按业务规模引入） |
@@ -1820,8 +2389,102 @@ Authorization: Bearer {device_token}
 | 日志格式 | 结构化 JSON，统一字段命名（snake_case） |
 | API 规范 | RESTful，OpenAPI 3.0 文档自动生成；**V1.3 新增**：`POST /api/v1/transactions` 支持 multipart/form-data |
 | 版本管理 | Git，分支策略：main（生产）、develop（开发）、feature/*（功能） |
-| **成本上限（V1.1 新增，V1.2 调整，V1.3 调整）** | **MVP 阶段月成本 ≤ ¥12000**（**V1.3 调整**：原 OSS 按量费被 1TB SSD 替代）：含 ECS 2x（**+1TB SSD/台，V1.3 新增**）、RDS、Redis 4GB、**LocalStorageBackend（无 OSS 费，V1.3 调整）**、SLB、KMS、**Worker 2-3 台 × ¥600/月 = ¥1200-1800** |
+| **成本上限（V1.1 新增，V1.2 调整，V1.3 调整，V1.4 调整）** | **MVP 阶段月成本 ≤ ¥14000**（**V1.4 调整**：原 ¥12000 提升因 8C 16GB 电脑配置不变但每电脑跑 3 进程，整体电脑数需求减少 → 单站点月成本基本持平；调整原因：rsync 脚本运维 + K8s 监控增强的成本估算））：含 ECS 2x（**+1TB SSD/台**）、RDS、Redis 4GB、**LocalStorageBackend（无 OSS 费）**、SLB、KMS、**Worker 电脑 2-3 台 × ¥600/月 = ¥1200-1800** |
 | **脚本调试（V1.2 新增）** | **Worker 端脚本支持 PyCharm/VSCode 断点调试（标准 Python 进程）** |
+
+---
+
+## 9.1 URL 签名机制（V1.3.1 新增，P2 闭环）
+
+V1.3 引入 `DownloadUrl` 实体时仅定义了 URL 字段，未指定签名算法、密钥管理、token claim 验证流程。本节定义完整的 URL 签名与验证机制。
+
+### 9.1.1 签名算法
+
+**算法选型：HMAC-SHA256**
+
+```
+signed_url = base64url(
+  url_path + "?" + canonical_query
+) + "." + base64url(hmac_sha256(secret_key, base_string))
+```
+
+**base_string 构造**：
+```
+{url_path}\n{expires_at_unix}\n{device_id}\n{attachment_id}\n{customer_id}
+```
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `url_path` | ✓ | `/api/v1/downloads/{url_id}` |
+| `expires_at_unix` | ✓ | URL 过期时间戳（生成时 + 5min） |
+| `device_id` | ✓ | 绑定设备（防止 URL 被劫持到其他 Device） |
+| `attachment_id` | ✓ | 绑定附件（防越权下载） |
+| `customer_id` | ✓ | 绑定租户（防跨客户访问，P9 闭环） |
+
+**token claim 结构**（GET `/api/v1/downloads/{url_id}` 时校验）：
+
+| claim | 类型 | 说明 |
+|-------|------|------|
+| `signature` | String | HMAC-SHA256 签名（base64url） |
+| `expires_at` | Long | Unix 时间戳 |
+| `device_id` | String | 期望的设备 ID |
+| `attachment_id` | String | 期望的附件 ID |
+| `customer_id` | String | 期望的租户 ID |
+
+### 9.1.2 密钥管理
+
+- **密钥存储**：HMAC secret_key 由 **KMS 托管**（V1.1 合规已要求 KMS，V1.3.1 复用）
+- **密钥获取**：Backend 启动时从 KMS 加载 secret_key 缓存到内存；KMS 不可用时使用上次缓存的密钥（**降级不重启**）
+- **密钥轮转**：≤ 90 天一次（与 §2.5 KMS 密钥轮转周期一致）
+- **轮转策略**：支持两个 secret_key 并行验证（key_id 标识），新 key 验证优先，旧 key 兜底；7 天过渡期后下线旧 key
+
+### 9.1.3 验证流程
+
+```
+GET /api/v1/downloads/{url_id}?token={base64url(sig)}&expires={ts}
+                              &device_id={did}&attachment_id={aid}
+
+Backend 端验证步骤:
+1. 查 DownloadUrl 表，url_id 必须存在
+2. 校验 expires_at 未过期（now < expires_at）
+3. 校验 consumed_at 为 NULL（一次性消费）
+4. 校验 device_id / attachment_id / customer_id 与 base_string 一致
+5. 用 secret_key 重算 HMAC-SHA256，与请求 signature 严格相等（用 hmac.compare_digest 防时序攻击）
+6. 通过后：返回文件二进制（Content-MD5 头校验），更新 consumed_at = NOW()
+7. 任意一步失败：返回 401 Unauthorized，不暴露具体失败原因
+```
+
+**一次性消费语义**：consumed_at 一旦设置，URL 永久失效。这避免了"URL 泄漏 → 任意次下载"的风险。Device 重试下载会触发续签（`POST /api/v1/downloads/{url_id}/refresh`）。
+
+### 9.1.4 错误码
+
+| 状态码 | 触发条件 |
+|--------|----------|
+| 200 | URL 验证通过，返回文件 |
+| 401 | signature 错误 / 过期 / device_id 不匹配 / attachment_id 不匹配 |
+| 404 | url_id 不存在 |
+| 410 | URL 已被消费（consumed_at 非 NULL） |
+| 413 | 文件大小超过单次下载上限（默认 50MB） |
+| 500 | KMS 不可用且无缓存密钥（极端降级场景） |
+
+### 9.1.5 与存储后端的关系
+
+| 后端 | URL 签名实现 | 验证位置 |
+|------|-------------|----------|
+| `LocalStorageBackend` | **Backend 自签 HMAC**（默认） | Backend 自身（`/api/v1/downloads/{url_id}`） |
+| `OssStorageBackend`（V1.4+） | OSS 自身签名（V4 算法） | OSS 自身（直连 OSS 下载） |
+| `MinioStorageBackend`（V1.4+） | Backend 自签（与 Local 相同） | Backend 自身（MinIO 不签 URL） |
+
+V1.3.1 默认 `LocalStorageBackend` 走 HMAC 路径。V1.4+ 切换 OSS 时自动改用 OSS 签名（业务代码不变，由 `StorageBackend.generate_signed_url` 内部决定）。
+
+### 9.1.6 选型对比（office-hours P2 决策依据）
+
+| 方案 | 优点 | 缺点 | 实施成本（人天） | 库依赖 | 决策 |
+|------|------|------|------------------|--------|------|
+| **A. HMAC-SHA256（含 claim 绑定）**（推荐） | 标准算法；可绑定 device/attachment/customer；签名无状态；轮转友好 | 实现需自己写验证 | 1-2 人天 | 标准库 `hmac` / `hashlib` | ✓ V1.3.1 采用 |
+| B. JWT | 标准 token；可携带复杂 claim；社区库成熟 | token 较大（>200B）；轮转需签名密钥切换；JWT 库供应链风险 | 0.5 人天 | `PyJWT` 或 `python-jose` | 不用 |
+| C. 随机 token 查表 | 实现最简 | 需 DB 查表（高 QPS 下压力大）；token 泄漏 = 永久访问 | 0.5 人天 | 无 | 不用 |
+| D. 长 token 不查表 | 极简 | 泄漏 = 永久访问；不可轮转；不可绑定设备 | 0.1 人天 | 无 | 不用 |
 
 ---
 
@@ -1878,13 +2541,21 @@ Authorization: Bearer {device_token}
 | **AC-NEW-012（V1.2 新增）** | **桌面 IDE 调试** | **Worker 端脚本可用 PyCharm/VSCode 断点调试** |
 | **AC-NEW-013（V1.2 新增）** | **脚本热更新** | **Worker 重启 → 立即可用新脚本（无需下发到 Device）** |
 | **AC-NEW-V13-001（V1.3 新增）** | **multipart 事务提交** | **`POST /api/v1/transactions` 接受 multipart/form-data，事务 + 多文件原子提交；服务端成功落地所有文件并返回 `attachment_id` 列表** |
-| **AC-NEW-V13-002（V1.3 新增）** | **LocalStorageBackend 默认** | **V1.3 默认后端为 `LocalStorageBackend`，文件落地到 `/data/attachments/{attachment_id}/{filename}`** |
+| **AC-NEW-V13-002（V1.3 新增，V1.3.1 修订）** | **LocalStorageBackend 默认** | **V1.3 默认后端为 `LocalStorageBackend`，文件落地到 `/data/attachments/{customer_id}/{attachment_id}/{filename}`（V1.3.1 修订，加入 customer_id 多租户隔离）** |
 | **AC-NEW-V13-003（V1.3 新增）** | **下载 URL API** | **`POST /transactions/{id}/download-urls` 返回 5min TTL 的签名 URL，V1.3 默认指向 Backend 自身 `GET /api/v1/downloads/{url_id}`** |
 | **AC-NEW-V13-004（V1.3 新增）** | **Device 直连下载** | **Device 通过签名 URL 100% 完成下载，URL 指向对 Device 透明** |
 | **AC-NEW-V13-005（V1.3 新增）** | **下载 URL 续签** | **URL 过期前自动续签成功；连续 3 次失败该事务置 FAIL（接口路径从 `oss-urls` 改为 `downloads/{url_id}`）** |
 | **AC-NEW-V13-006（V1.3 新增）** | **StorageBackend 抽象** | **业务代码通过 `StorageBackend` 接口访问存储；切换后端实现不影响业务代码（需重写单测验证）** |
 | **AC-NEW-V13-007（V1.3 新增）** | **存储故障隔离** | **`LocalStorageBackend` 磁盘满时新事务返回 507（Insufficient Storage），不影响其他事务执行** |
 | **AC-NEW-V13-008（V1.3 新增）** | **`OssSignedUrl` 标 DEPRECATED** | **新事务不创建 `OssSignedUrl` 记录，仅创建 `DownloadUrl` 记录；旧数据保留可查** |
+| **AC-NEW-V13-009（V1.3.1 新增，P6 闭环）** | **多文件失败回滚** | **5/6 文件成功 + 1 失败时，已落地文件标记 `is_orphan = true`（不删除，避免磁盘 IO）；FR-SVR-023 GC 任务 24h 后清理；事务 FAIL 返回 422 + `error.type=MULTIPART_PARTIAL_FAIL`（V1.3.1 修订，error.type 体系详见 §4.1 FR-SVR-001 验收）** |
+| **AC-NEW-V13-010（V1.3.1 新增，P2 闭环）** | **URL 签名验证** | **GET /api/v1/downloads/{url_id} 验证 HMAC-SHA256 签名 + 一次性消费；伪造 token 返回 401；过期 token 返回 401；二次消费返回 410** |
+| **AC-NEW-V13-011（V1.3.1 新增，V1.4 修订）** | **存储灾备切换演练** | **手动触发 Backend #1 故障，运维 10min 内完成 SLB 切流到 #2；事务不丢失（RPO ≤ 5min 容忍最近 5min 数据丢失）；rsync 同步链路在 5min 内重连；切回 #1 后反向 rsync 回追** |
+| **AC-NEW-V14-001（V1.4 新增，P1 闭环）** | **Worker 1:1 进程绑定** | **Worker 启动时通过 `--adb-serial` 绑定 1 台 Device；Backend 验证 `Worker.bound_device_id` 与 `Device.adb_serial` 一致；不一致则注册失败** |
+| **AC-NEW-V14-002（V1.4 新增，P1 闭环）** | **多 Worker 进程隔离** | **同台电脑启动 3 个 Worker 进程，各自连接 1 台 Device（8765/8766/8767 端口互不冲突）；1 个 Worker 进程崩溃不影响另 2 个** |
+| **AC-NEW-V14-003（V1.4 新增，P1 闭环）** | **进程崩溃爆炸半径** | **Worker 进程崩溃 60s 内仅其绑定的 1 个事务回退 PENDING；同台电脑其他 Worker 进程不受影响** |
+| **AC-NEW-V14-004（V1.4 新增，P3 闭环）** | **PENDING 超时** | **事务 PENDING 状态超过 10min 自动转为 PENDING_TIMEOUT；响应中 `estimated_wait` 字段返回估算等待时长；设备可用时自动恢复 PENDING → DISPATCHED** |
+| **AC-NEW-V14-005（V1.4 新增，P2 闭环）** | **USB adb reverse 基准** | **预生产环境 8MB 文件下载耗时 ≤ 8s（≥1MB/s）；<1MB/s 时启动站点 VPN 备选方案** |
 
 ### 10.2 非功能验收
 
@@ -1898,13 +2569,15 @@ Authorization: Bearer {device_token}
 | NAC-006 | 扩展验证 | 新增 Worker 自动注册并参与调度 |
 | NAC-007 | 可观测性 | 关键指标 Prometheus 拉取成功；Trace 可还原事务完整调用链（**V1.2 扩展**：含 Airtest runtime Span） |
 | NAC-008 | 灾备 | DB 主从切换 RTO ≤ 5min；Backend SLB 切流 RTO ≤ 30s |
-| **NAC-009（V1.2 新增）** | **单 Worker 并发** | **单 Worker 同时挂载 ≤ 3 Device，CPU < 80%** |
-| **NAC-010（V1.2 新增）** | **单站点容量** | **2-3 Worker × 2-3 Device = 4-9 Device/站点** |
+| **NAC-009（V1.4 调整）** | **单 Worker 进程设备数** | **1 Worker 进程 = 1 Device（1:1 绑定）；单进程 CPU < 80%（无 GIL 轮转）** |
+| **NAC-010（V1.4 调整）** | **单站点容量** | **2-3 电脑 × 3 进程/电脑 × 1 Device = 6-9 Device/站点** |
 | **NAC-011（V1.2 新增）** | **ADB 断开重连** | **ADB 断开后 10s 内自动重连** |
 | **NAC-012（V1.2 新增）** | **USB 物理断开检测** | **USB 断开 30s 内 Dashboard 可见告警** |
 | **NAC-V13-001（V1.3 新增）** | **存储容量** | **`LocalStorageBackend` 单 Backend 实例支持 ≥ 500GB 影像文件存储；磁盘使用率监控阈值 80%** |
 | **NAC-V13-002（V1.3 新增）** | **下载延迟** | **`GET /api/v1/downloads/{url_id}` P95 ≤ 200ms（Backend 服务静态文件）** |
-| **NAC-V13-003（V1.3 新增）** | **存储故障 RTO** | **`LocalStorageBackend` 主机故障 RTO ≤ 30min（通过 Backend 双实例 + 文件同步 / DRBD 保障）** |
+| **NAC-V13-003（V1.3 新增，V1.4 修订）** | **存储故障 RTO** | **`LocalStorageBackend` 主机故障 RTO ≤ 10min（V1.4 起通过 rsync + 手动 SLB 切流保障）** |
+| **NAC-V14-001（V1.4 新增，P3 闭环）** | **PENDING_TIMEOUT 触发率** | **PENDING_TIMEOUT 频率 ≤ 1 次/小时（持续 30min 内无可用设备视为异常）** |
+| **NAC-V14-002（V1.4 新增，P2 闭环）** | **USB adb reverse 带宽** | **8MB 文件下载 P95 ≤ 8s（≥1MB/s）；<1MB/s 时切站点 VPN** |
 
 ### 10.3 测试策略（V1.1 新增，V1.2 强化）
 
@@ -1940,6 +2613,63 @@ Authorization: Bearer {device_token}
 - 预发环境：1 套 MVP 规模部署，真实 Worker + 真机（用于 L4）
 - 生产环境：1% 流量灰度（用于 A/B 验证）
 
+### 10.4 存储测试策略（V1.3.1 新增）
+
+V1.3 引入 `LocalStorageBackend` + URL 签名机制，存储相关测试需要专门覆盖。
+
+**L1 单元测试（V1.3.1 扩展）**
+
+| 模块 | 关键测试 |
+|------|---------|
+| `LocalStorageBackend` | `put`/`get`/`delete`/`exists` 正常 + 边界（nil/empty/超大文件/磁盘满） |
+| `StorageBackend.generate_signed_url` | URL 格式 + TTL 边界 + 路径转义 |
+| URL 签名验证函数 | 4 字段 claim 严格匹配 + HMAC 重算 + `hmac.compare_digest` 防时序攻击 |
+| 一次性消费逻辑 | `consumed_at` 已设置时返回 410 |
+| FR-SVR-023 GC 任务 | 孤儿对象清理 + 7 天后保留 metadata 清理 + Dry-run 模式 |
+| 5/6 文件失败回滚 | `is_orphan = true` 标记 + 24h 后 GC 清理 |
+
+**L2 契约测试（V1.3.1 扩展）**
+
+| 接口 | 关键测试 |
+|------|---------|
+| `POST /api/v1/transactions` (multipart) | 5 文件成功 + 1 失败 → 422 + `error.type=MULTIPART_PARTIAL_FAIL`（V1.3.1 修订）；MD5 校验失败 → 400；存储后端不可用 → 507；**error.type 分层测试**：5 种 type 各自覆盖（PARTIAL/MD5/MISSING/CUSTOMER/REFRESH）|
+| `GET /api/v1/downloads/{url_id}` | 签名正确 → 200；伪造 → 401；过期 → 401；二次消费 → 410；device_id 不匹配 → 401 |
+| `POST /api/v1/downloads/{url_id}/refresh` | 续签成功 → 200；refresh_count 超 3 → 422 + `error.type=REFRESH_EXCEEDED`；device_id 不匹配 → 401 |
+| 切换后端（`OssStorageBackend` mock） | URL 自动改指向 OSS 域名；验证逻辑保持一致 |
+
+**L3 端到端测试（V1.3.1 扩展）**
+
+| 场景 | 关键测试 |
+|------|---------|
+| 完整 multipart 提交流程 | 6 文件 8MB 事务；文件落地后 device 通过 USB 反向网络下载 |
+| 多文件失败回滚完整流程 | 5/6 成功 + 1 失败 → 事务 FAIL；24h 后 GC 清理孤儿 |
+| 灾备切换 | Backend #1 故障 → 5min 内 #2 接管 → 事务不丢失 |
+| URL 签名 KMS 密钥轮转 | 旧 key 仍验证成功 7 天；新 key 优先 |
+
+**L4 录屏回归（V1.3.1 不适用）**
+
+存储层是基础设施，不涉及 UI 自动化，L4 不覆盖。
+
+**L5 灾备演练（V1.3.1 新增专章，V1.4 修订）**
+
+| 频率 | 内容 | SLA 验证 |
+|------|------|----------|
+| 每月 1 次 | 手动模拟 Backend #1 整机故障 + SLB 切流到 #2 | 验证 RTO ≤ 10min（V1.4 调整，原 5min） |
+| 每季度 1 次 | rsync 链路抖动 + 恢复（V1.4 替代 DRBD 演练） | 验证 RPO ≤ 5min（容忍最近 5min 数据丢失） |
+| 每年 1 次 | KMS 密钥轮转演练 | 验证 7 天过渡期零中断 |
+| 每年 1 次 | 存储后端切换演练 | 验证 LocalStorageBackend → OssStorageBackend 切换可逆 |
+| **每年 1 次（V1.4 新增）** | **MinIO 切换演练（V1.4+ 中期）** | **验证 LocalStorageBackend → MinioStorageBackend 切换可行性** |
+
+**测试覆盖率指标（V1.3.1 新增）**
+
+| 指标 | 目标 |
+|------|------|
+| L1 单元测试行覆盖 | ≥ 80%（V1.2 已要求）|
+| URL 签名验证单测覆盖 | 100%（安全关键路径）|
+| GC 任务场景覆盖 | 100%（孤儿/过期/保留期/Dry-run 四场景）|
+| Multipart 失败场景 E2E 覆盖 | 100%（5/6 失败 + 1/6 失败 + 0/6 失败）|
+| 灾备演练频次 | 月度 ≥ 1 次 |
+
 ---
 
 
@@ -1959,11 +2689,11 @@ Authorization: Bearer {device_token}
 | ~~**ADB 反检测（V1.1 风险，V1.2 移除）**~~ | ~~事务 FAIL~~ | ~~中~~ | ~~**已 PoC 验证**：目标保险 APP 对 ADB 注入无检测反应，风险移除~~ |
 | **Worker CPU 瓶颈（V1.2 新增）** | **单 Worker 仅 2-3 Device，并发能力下降** | **高** | **接受限制；按需扩容 Worker 数量；监控 CPU 阈值（> 80% 告警）** |
 | **单事务 ATT 延长 50%（V1.2 新增）** | **从 3-5min 到 5-8min** | **高** | **业务方接受；优化 Airtest 脚本；ADB 性能调优** |
-| **Worker 进程崩溃影响扩大（V1.2 新增）** | **1 Worker 故障 = 2-3 Device 事务中断** | **中** | **限制单 Worker 负载；快速故障检测（心跳 30s）；事务自动回退 PENDING** |
+| **Worker 进程崩溃影响扩大（V1.2 新增，V1.4 调整）** | **V1.4 起**：1 Worker 进程故障 = 1 Device 事务中断（V1.2 时期 1 Worker 故障 = 2-3 事务）** | **中** | **限制单 Worker 进程负载（1:1 绑定）；快速故障检测（心跳 30s）；事务自动回退 PENDING** |
 | **USB 物理连接不稳定（V1.2 新增）** | **接触不良导致 ADB 断开，事务中断** | **中** | **优质 USB 线材；ADB 自动重连（≤ 10s）；事务回退 PENDING** |
 | **Airtest 截图/图像识别失败（V1.2 新增）** | **UI 变化导致 Step 失败** | **中** | **L4 录屏回归（V1.2 提升权重）；Step 重试机制；快速脚本更新** |
 | **本地存储容量风险（V1.3 新增）** | **`LocalStorageBackend` 单机磁盘写满 → 新事务提交失败 507** | **中** | **监控磁盘使用率 > 80% 告警；定期清理过期附件（事务完成后 > 7 天）；中期切换 `OssStorageBackend` 扩展** |
-| **Backend 单点存储（V1.3 新增）** | **`LocalStorageBackend` Backend 主机故障 → 文件不可访问、事务 FAIL** | **中** | **Backend 双实例 + 文件同步（如 DRBD / rsync / 共享存储）；RTO 取决于同步策略；中期切换 `OssStorageBackend` 消除单点** |
+| **Backend 单点存储（V1.3 新增，V1.4 调整）** | **`LocalStorageBackend` Backend 主机故障 → 文件不可访问、事务 FAIL** | **中** | **V1.4 起**：Backend 双实例 + **rsync 5min 同步** + 手动 SLB 切流（RPO ≤5min / RTO ≤10min）；中期业务量 > 2000 笔/日时切 `MinioStorageBackend` 集群消除单点 |
 | **存储后端切换兼容性（V1.3 新增）** | **`LocalStorageBackend` → `OssStorageBackend` 切换时历史事务的 URL 失效** | **中** | **切换前批量预热新后端 URL；历史事务在切换后 7 天内允许强制重新生成 URL** |
 
 ### 11.2 外部依赖
@@ -1995,8 +2725,8 @@ Authorization: Bearer {device_token}
 | AS-006 | 对象存储服务可用（MinIO 或 S3 兼容） |
 | AS-007（V1.1 新增，V1.3 调整为 AS-013） | ~~OSS 桶域名需公网可访问（Device 直连下载前提）~~ | **V1.3 起移除**：V1.3 不再依赖 OSS 直连，下载 URL 指向 Backend 自身；原 AS-007 由 AS-013 替代 |
 | AS-008（V1.1 新增） | **KMS 服务跨地域高可用**（任一区域故障不影响业务） |
-| AS-009（V1.1 新增） | **客户已确认 OSS 存储地域在合规范围内**（无跨境合规问题） |
-| **AS-010（V1.2 新增）** | **Worker 与 Device 间 USB 物理连接稳定（ADB 不断开）；单 Worker 限挂载 2-3 Device** |
+| AS-009（V1.1 新增，V1.3 调整） | **客户已确认存储后端地域在合规范围内**（无跨境合规问题；V1.3 起适用于所有存储后端，不仅 OSS） |
+| **AS-010（V1.2 新增，V1.4 调整）** | **Worker 进程与 Device 间 USB 物理连接稳定（ADB 不断开）；1 Worker 进程 = 1 Device（1:1 绑定）；同台电脑 2-3 个 Worker 进程** |
 | **AS-011（V1.2 新增）** | **目标保险 APP 对 ADB 注入无检测反应（已 PoC 验证）** |
 | **AS-012（V1.2 新增）** | **Airtest 框架对目标保险 APP 的 UI 操作可识别（图像/POCO）** |
 | **AS-013（V1.3 新增）** | **Backend 服务可对外暴露 `GET /api/v1/downloads/{url_id}` 端点（公网或局域网均可，Device 需能直连）** |
@@ -2032,6 +2762,78 @@ Authorization: Bearer {device_token}
 | 单 Backend 磁盘 | 500GB / 1TB / 2TB | **1TB SSD × 2 实例** | 500 笔/日 × 5MB × 30 天 ≈ 75GB/月，预留 8 个月 + 80% 冗余 |
 | V1.2 → V1.3 迁移策略 | 一次性切换 / 渐进式双轨 / 历史数据迁回 | **渐进式双轨 3 个月** | 不影响在途事务；新事务强制 multipart；3 个月后清空旧接口 |
 
+### 11.5.1 V1.3.1 office-hours 评审补充决策（落地）
+
+| 决策点 | 选项 | **最终选择** | 理由 | 决策日期 | office-hours 闭环 |
+|--------|------|-------------|------|----------|-------------------|
+| URL 签名机制 | JWT / HMAC-SHA256 / 随机 token 查表 | **HMAC-SHA256（含 device_id + attachment_id + customer_id claim）** | 签名无状态；可绑定 claim；标准算法；轮转友好 | 2026-06-05 | P2 闭环 |
+| 密钥管理 | 环境变量 / KMS / HSM | **KMS 托管**（与 §2.5 合规一致） | 密钥不落代码；轮转可控；IAM 权限隔离 | 2026-06-05 | P2 闭环 |
+| 一次性消费语义 | 短 token + 查表 / 长 token 不查表 / 一次性消费 | **一次性消费**（consumed_at 标记） | 避免 URL 泄漏导致任意次下载 | 2026-06-05 | P2 闭环 |
+| LocalStorageBackend 灾备 | DRBD / MinIO / 共享块存储 | **DRBD active-passive + Pacemaker** | V1.3.1 MVP 选最简方案；MinIO 留 V1.4+ 中期切换 | 2026-06-05 | P4 闭环 |
+| 灾备 RPO | 0 / 几秒 / 几分钟 | **RPO=0**（DRBD 同步复制） | 业务数据零丢失 | 2026-06-05 | P4 闭环 |
+| 灾备 RTO | 30s / 5min / 30min | **RTO ≤ 5min**（Pacemaker 自动切换 + K8s Service 切流量） | SLA 承诺 | 2026-06-05 | P4 闭环 |
+| 设备下载网络拓扑 | USB 反向网络 / 站点 VPN / 公网暴露 | **USB 反向网络**（Airtest 框架原生） | 零成本；不破坏"Device 直连"架构优点 | 2026-06-05 | P7 闭环 |
+| 多租户隔离 | 不隔离 / URL token 绑定 / 物理隔离 | **URL token claim 绑定 customer_id** | 业务代码无感；防跨客户访问 | 2026-06-05 | P9 闭环 |
+| Multipart 失败回滚 | 删已落地 / 标记 orphan + GC / 增量上传 | **标记 orphan + GC（24h 后清理）** | 实现简单；避免磁盘 IO 抖动 | 2026-06-05 | P6 闭环 |
+| 附件大小分布 | 假设均值 5MB / 按抽样分布 | **按抽样分布（身份证 2MB / 行驶证 1.5MB / ...，均值 8MB）** | 容量规划更精准 | 2026-06-05 | P5 闭环 |
+| 7 天保留语义 | 全删 / 保留 metadata / 保留全部 | **保留 metadata + 7 天后清文件** | 满足审计 + 控制磁盘 | 2026-06-05 | P5 闭环 |
+| 历史 OSS 附件迁移 | 全部迁回 / 保留 3 个月 / 不迁 | **批量迁回 + OssReadOnly 适配器 3 个月** | 老事务 3 个月内可读，3 个月后业务方重新提交 | 2026-06-05 | P3 闭环 |
+| V1.2 兼容接口保留期 | 1 个月 / 3 个月 / 6 个月 | **3 个月** | 平衡业务连续性 + 推动切换 | 2026-06-05 | P3 闭环 |
+| 1TB SSD vs 2TB SSD | 1TB MVP / 2TB 起步 | **1TB MVP + 扩容触发** | 节省初期成本；触发条件明确 | 2026-06-05 | P5 闭环 |
+| MinIO 替代方案时机 | V1.3 立即 / V1.4 中期 / V2.0 远期 | **V1.4+ 中期（业务量 > 2000 笔/日时重新评估）** | MVP 阶段 DRBD 已够用 | 2026-06-05 | 评审方案 B 备选 |
+
+### 11.5.2 V1.4 autoplan 评审补充决策（落地）
+
+| 决策点 | 选项 | **最终选择** | 理由 | 决策日期 | autoplan 闭环 |
+|--------|------|-------------|------|----------|----------------|
+| Worker 并发模型 | 1:N（1 Worker 挂 2-3 Device） / 1:1（1 Worker 进程 = 1 Device） | **1:1 进程模型**（1 Worker 进程绑定 1 台 Device；同台电脑 2-3 个独立进程） | 消除 GIL 轮转；ATT 确定性提升；进程崩溃爆炸半径缩小（1 事务 vs 2-3 事务）；独立重启能力 | 2026-06-05 | P1 闭环 |
+| Worker 启动方式 | 启动后动态挂载 / 启动时 `--adb-serial` 固定绑定 | **启动时 `--adb-serial` 固定绑定** | 简化 Worker 内部逻辑（无设备调度）；启动失败立即可见（不匹配则退出） | 2026-06-05 | P1 闭环 |
+| PENDING 长时间等待 | 无限期 PENDING / 加超时 + 通知 | **10min 超时 → PENDING_TIMEOUT → 通知用户；设备可用时自动恢复** | 改善 UX（用户知道要等多久）；不丢失事务（非终态） | 2026-06-05 | P3 闭环 |
+| USB adb reverse 带宽 | 假设 ≥5MB/s / 预生产基准测试 + 阈值 | **预生产基准测试 ≥1MB/s 为门槛；<1MB/s 切站点 VPN** | 假设性数字不可信；带实测数据决策 | 2026-06-05 | P2 闭环 |
+| 存储灾备 MVP 方案 | DRBD active-passive + Pacemaker / rsync + 手动切换 | **rsync 5min 同步 + 手动 SLB 切流** | 运维复杂度大幅降低；K8s 不再混搭传统 HA 集群；RPO ≤5min 可接受 | 2026-06-05 | P4 闭环 |
+| 存储灾备中期方案 | 继续 rsync / 切 DRBD / 切 MinIO | **直接切 MinIO 集群** | 业务量增长时跳过 DRBD；MinIO 多副本内置 RPO=0；与 K8s 天然兼容 | 2026-06-05 | P4 闭环（中期） |
+| Multipart 原子性 | 数据库分布式事务 / 最终一致性 + GC | **最终一致性 + GC 兜底**（事务+文件非强一致；标记 `is_orphan=true` + 24h GC 清理） | 分布式事务复杂度过高；`is_orphan` + GC 满足业务 | 2026-06-05 | P6 闭环 |
+| Worker 进程崩溃爆炸半径 | 2-3 事务 / 1 事务 | **1 事务**（1:1 进程模型） | 故障隔离粒度更细；用户感知影响范围缩小 | 2026-06-05 | P1 闭环 |
+| Worker 硬件规格 | 8C 16GB / 4C 8GB | **8C 16GB 整机**（每台电脑跑 2-3 Worker 进程，单进程虚拟 4C 8GB） | 单进程规格下调；整机配置不变（承载 3 进程） | 2026-06-05 | P1 闭环 |
+| API estimated_wait 字段 | 不返回 / 估算返回 | **返回 estimated_wait 字段**（后端估算排队等待秒数） | 改善前端 UX；用户可决定是否等待 | 2026-06-05 | P3 闭环 |
+
+### 11.6 开放问题追踪表（V1.3.1 新增）
+
+| # | 问题 | 当前状态 | 责任人 | 解决时间 |
+|---|------|----------|--------|----------|
+| Q1 | 销售团队能接受"机器人提交后无法撤回"吗？| V1.1 闭环 | - | V1.1 Review |
+| Q2 | 当前保险 APP 的 UI 稳定性？| 待业务方回复 | 业务方 | V1.2 Review |
+| Q3 | 业务类型误选的事务事后如何处理？| 待定 | 业务方 | V1.2 Review |
+| Q4 | 客户对数据存储地域有要求？| V1.1 闭环（默认华东 1 / 华北 2） | - | V1.1 Review |
+| Q5 | 是否需要支持"中途人工接管"？| 待定 | 业务方 | V1.2 Review |
+| Q6 | DPoP API 访问控制？| V1.1 决策"复用数据主体角色 + 手机号 + 验证码" | - | V1.1 Review |
+| Q7 | 业务方是否接受"5-8 分钟 ATT + 单 Worker 2-3 Device"？| 待业务方回复 | 业务方 | V1.2 Review |
+| Q8 | 单站点月成本 ¥1200-1800 是否在预算内？| 待业务方回复 | 业务方 | V1.2 Review |
+| Q9 | 多站点 2-3 Worker 维护能力？| 待运维方回复 | 运维方 | V1.2 Review |
+| Q10 | Airtest 脚本编写规范？| 待定 | 业务方 + 运维 | V1.2 Review |
+| Q11 | 是否需要 WiFi ADB 支持？| V1.2 决定"USB MVP 优先" | - | V1.2 Review |
+| Q12 | Backend 1TB SSD 是否够 MVP？| **V1.3.1 决策**（附件分布假设 + 7 天保留语义 + 扩容触发）| - | V1.3.1 闭环 |
+| Q13 | LocalStorageBackend 灾备方案？| **V1.3.1 决策**（DRBD active-passive）| - | V1.3.1 闭环 |
+| Q14 | V1.2 → V1.3 渐进式迁移期长度？| **V1.3.1 决策**（3 个月）| - | V1.3.1 闭环 |
+| Q15 | 事务中切换 OssStorageBackend？| V1.3 决定"按事务级隔离，事务内不切换" | - | V1.3 闭环 |
+| Q16 | URL 签名机制选型？| **V1.3.1 决策**（HMAC-SHA256 + KMS 密钥，详见 §9.1）| - | V1.3.1 闭环 |
+| Q17 | DRBD 灾备切换 SLA？| **V1.3.1 决策**（RTO ≤ 5min, RPO = 0, 月度演练）| - | V1.3.1 闭环 |
+| Q18 | MinIO 替代方案时机？| V1.3.1 决策"V1.4+ 中期" | - | V1.3.1 闭环 |
+| Q19 | 1TB SSD 容量假设？| **V1.3.1 决策**（MVP 500 笔/日撑 4 年）| - | V1.3.1 闭环 |
+| Q20（V1.4 新增，P3 闭环） | PENDING_TIMEOUT 阈值（10min）是否合理？| **V1.4 决策**：10min 默认（可配置）；触发后通知用户"当前无可用设备，事务将在设备可用后自动执行" | 业务方 | V1.4 Review |
+| Q21（V1.4 新增，P1 闭环） | 1:1 进程模型下，同台电脑 2-3 个 Worker 进程的运维复杂度是否可接受？| **V1.4 决策**：接受；每台电脑 2-3 进程独立运行；独立重启能力提升运维体验 | 运维方 | V1.4 Review |
+| Q22（V1.4 新增，P4 闭环） | rsync 5min RPO 是否在业务容忍范围内？| **V1.4 决策**：可接受（业务数据可重建，影像文件最近 5min 内丢失可重传）；中期切 MinIO 消除 RPO | 业务方 | V1.4 Review |
+| Q23（V1.4 新增，P7 闭环） | USB adb reverse 在生产环境的稳定性？| **V1.4 决策**：预生产基准测试通过后部署；<1MB/s 切站点 VPN | 运维方 | V1.4 Review |
+
+**闭环统计**：
+- V1.1 闭环：Q1, Q4, Q6（3 项）
+- V1.2 闭环：Q11（1 项）
+- V1.3 闭环：Q15（1 项）
+- V1.3.1 闭环：Q12, Q13, Q14, Q16, Q17, Q18, Q19（7 项）
+- **V1.4 闭环：Q20, Q21, Q22, Q23（4 项新增闭环）**
+- 待定（**Review 阻塞项 P7 闭环**）：**Q7（ATT 5-8min 接受度）、Q8（月成本 ¥1200-1800 预算）** — 阻塞 V1.4 进入 Review 状态
+- 待定（实施前确认）：Q2, Q3, Q5, Q9, Q10（5 项）
+
 ---
 
 ## 12. 发布与变更管理（V1.1 新增，V1.2 扩展）
@@ -2046,7 +2848,123 @@ Authorization: Bearer {device_token}
 | **变更通知** | 提前 24h 在运维群通知；变更后 1h 内发布变更报告 |
 | **回滚流程** | 触发条件：5xx 错误率 > 5% 持续 5min / P1 告警 / 业务方紧急请求；执行：K8s `kubectl rollout undo` |
 | **客户端兼容性** | Backend API 保持前 2 个版本兼容；强制升级时仅弃用 v(N-2) |
-| **架构变更发布（V1.2 新增，V1.3 扩展）** | **V1.1 → V1.2 升级采用双轨并行（V1.1 架构保留为 Plan B），3 个月观察期后切流到 V1.2**；**V1.3 新增**：V1.2 → V1.3 升级采用"渐进式迁移"——Backend 部署 V1.3 代码后，旧 `POST /transactions`（带 `file_url`）仍可作为过渡期兼容接口运行 3 个月；3 个月后强制要求 multipart 上传；存储层 V1.3 默认 `LocalStorageBackend`，历史 OSS 附件保留可读 |
+| **架构变更发布（V1.2 新增，V1.3 扩展，V1.3.1 展开，V1.4 再次展开）** | **V1.1 → V1.2 升级采用双轨并行（V1.1 架构保留为 Plan B），3 个月观察期后切流到 V1.2**；**V1.3 新增**：V1.2 → V1.3 升级采用"渐进式迁移"——Backend 部署 V1.3 代码后，旧 `POST /transactions`（带 `file_url`）仍可作为过渡期兼容接口运行 3 个月；3 个月后强制要求 multipart 上传；存储层 V1.3 默认 `LocalStorageBackend`，历史 OSS 附件保留可读；**V1.3.1 展开为 3 任务**（见 §12.1）；**V1.4 展开为 5 任务**（见 §12.3）——Worker 1:1 进程模型 + DRBD→rsync + PENDING_TIMEOUT + USB 基准 + OssSignedUrl 字段清理 |
+
+### 12.1 V1.2 → V1.3.1 存储迁移详细计划（V1.3.1 新增，P3 闭环）
+
+V1.3 PRD §12 提到"渐进式双轨 3 个月"，但**未具体说明老 OSS 数据如何被新 V1.3.1 Backend 服务**。本节展开为 3 个具体子任务。
+
+**任务 1：批量迁移 V1.2 OSS 附件到 V1.3.1 LocalStorage**（Week 1-2）
+
+| 项目 | 详情 |
+|------|------|
+| 触发条件 | V1.3.1 部署前 2 周启动 |
+| 工具 | 一次性 Python 脚本 `tools/migrate_v12_oss_to_v13_local.py` |
+| 输入 | V1.2 OSS bucket + AccessKey + 待迁移事务 ID 列表（`status IN ('PENDING', 'RUNNING', 'DLQ') AND submitted_at > 'V1.3-1-cutoff'`） |
+| 处理 | OSS Get → Backend `POST /api/v1/attachments` (multipart) → 校验 MD5 → 标记 V1.2 Attachment.storage_url 为"已迁移" |
+| 输出 | 迁移报告（成功 N / 失败 M / MD5 不匹配 K） |
+| RTO | ≤ 48h（500 笔/日 × 60 天缓冲期） |
+| 失败回滚 | 失败项不删原 OSS 文件，下次重试 |
+| **前置依赖** | **无**（可独立执行） |
+
+**任务 2：V1.3.1 Backend 保留 OssReadOnly 适配器（V1.3.1 期间可读 V1.2 数据）**（Week 2-3）
+
+| 项目 | 详情 |
+|------|------|
+| 触发条件 | V1.3.1 部署时启用，3 个月后下线 |
+| 实现 | `OssReadOnlyStorageBackend` 实现 `StorageBackend.get()` 和 `generate_signed_url()`（不实现 put/delete） |
+| 路由逻辑 | `DownloadUrl` 记录新加 `origin_version`（V1.2 / V1.3.1）；V1.2 来源的 url 走 OssReadOnly 路径，V1.3.1 来源的走 LocalStorage |
+| 续签支持 | V1.2 老 url 续签时仍返回 OSS 签名 URL，3 个月后强制提示"V1.2 附件已过期，请重新提交" |
+| 资源占用 | 仅需 OSS SDK 读权限（RAM Role），无写权限（最小权限原则） |
+| **前置依赖** | **任务 1 至少完成 50%**（部分附件已迁到 V1.3.1 Backend 后，OssReadOnly 适配器才可上线；否则全 V1.2 事务需走 OSS 路径） |
+
+**任务 3：3 个月到期后老事务处理**（Month 3 末）
+
+| 项目 | 详情 |
+|------|------|
+| 触发条件 | V1.3.1 部署满 3 个月 |
+| 行动 | 1. 关闭 `POST /transactions` (V1.2 兼容 JSON 接口) 2. 关闭 OssReadOnly 适配器 3. 老 V1.2 事务（DORMANT > 90 天）批量置 FAIL 4. 通知业务方：3 个月前 V1.2 提交的事务需要重新提交 |
+| 灰度 | 不做灰度（一次性切换，业务方提前 30 天通知） |
+| 应急 | 保留 7 天紧急开关：若业务方投诉，可临时重启 OssReadOnly 适配器 7 天 |
+| **前置依赖** | **任务 1 + 任务 2 全部完成**（确保所有 V1.2 数据已迁走 / OssReadOnly 适配器已下线） |
+
+### 12.2 V1.2 → V1.3.1 迁移时序图
+
+```
+Week -2:  启动迁移脚本（任务 1），并行运行
+Week 0:   部署 V1.3.1（OssReadOnly 适配器启用，新接口上线）
+Week 1-4: 灰度（10% → 50% → 100% 流量切到 V1.3.1）
+Week 4-12: 双轨并行期（V1.2 / V1.3.1 共存）
+Week 12:  关闭 V1.2 兼容接口，下线 OssReadOnly 适配器
+Week 12+: 仅 V1.3.1 单轨运行
+```
+
+### 12.3 V1.3.1.1 → V1.4 迁移计划（V1.4 新增）
+
+V1.3.1.1 部署后单 Worker 挂 2-3 Device；V1.4 起改为 1:1 进程模型。本节定义迁移路径。
+
+**任务 1：Worker 进程拆分（Week 0）**
+
+| 项目 | 详情 |
+|------|------|
+| 触发条件 | V1.4 部署时同时执行 |
+| 操作 | 在每台 Worker 电脑上停掉旧 Worker 进程，按 1:1 启动新 Worker 进程 |
+| 旧进程停止 | `systemctl stop 3is-worker@default` |
+| 新进程启动 | `3is-worker --adb-serial=SERIAL_A --port=8765 &`<br>`3is-worker --adb-serial=SERIAL_B --port=8766 &`<br>`3is-worker --adb-serial=SERIAL_C --port=8767 &` |
+| 端口隔离 | 8765/8766/8767 互不冲突 |
+| 验证 | Backend Dashboard 显示 3 个独立 Worker 进程，各自 ONLINE，bound_device_id 正确 |
+| **前置依赖** | **无**（V1.4 部署同时） |
+
+**任务 2：DRBD 替换为 rsync（Week 0）**
+
+| 项目 | 详情 |
+|------|------|
+| 触发条件 | V1.4 部署时同时执行 |
+| 操作 | Backend 改回标准 Deployment（移除 StatefulSet + init container）；在 Backend #2 上部署 rsync cron |
+| rsync cron 部署 | `kubectl apply -f k8s/rsync-cronjob.yaml` |
+| DRBD 清理 | `drbdadm down r0`；移除 Pacemaker 资源；删除 StatefulSet + 相关 PVC |
+| 验证 | rsync 同步日志正常；SLB 切流演练 ≤ 10min |
+| **前置依赖** | **无**（V1.4 部署同时） |
+
+**任务 3：USB adb reverse 基准测试（V1.4 部署前 1 周）**
+
+| 项目 | 详情 |
+|------|------|
+| 触发条件 | V1.4 部署前 1 周 |
+| 操作 | 在预生产环境执行 §7.10 兼容性清单全部 8 项验证 |
+| 通过标准 | 8MB 文件下载 ≥1MB/s；Android 10/11/12/13 adb reverse 均成功 |
+| 失败回退 | 不达标时启动站点 VPN 备选方案；推迟 V1.4 部署 |
+| **前置依赖** | **无**（独立任务） |
+
+**任务 4：PENDING_TIMEOUT 灰度（Week 1-2）**
+
+| 项目 | 详情 |
+|------|------|
+| 触发条件 | V1.4 部署后 1 周 |
+| 操作 | 启用 PENDING_TIMEOUT 机制（默认 10min）；前端 Web 门户显示 PENDING_TIMEOUT 状态 |
+| 灰度 | 10% 销售账号先体验 → 50% → 100% |
+| 验证 | PENDING_TIMEOUT 频率 ≤ 1 次/小时（NAC-V14-001） |
+| **前置依赖** | **任务 1 完成**（Worker 1:1 模型部署） |
+
+**任务 5：OssSignedUrl 字段清理（Month 3 末）**
+
+| 项目 | 详情 |
+|------|------|
+| 触发条件 | V1.4 部署满 3 个月 |
+| 操作 | V1.3.1.1 时期的 OssSignedUrl 重复定义（行 1120-1131）已在 V1.4 文档中删除；代码层 `OssSignedUrl` 表标 DEPRECATED 后 3 个月可清理（如数据无引用） |
+| 验证 | 数据库 `OssSignedUrl` 表无新增记录；V1.4 后所有下载 URL 走 DownloadUrl |
+| **前置依赖** | **V1.3.1 → V1.4 迁移完成 + 3 个月观察期** |
+
+**V1.4 迁移时序图**
+
+```
+Week -1:  预生产 USB adb reverse 基准测试（任务 3）
+Week 0:   V1.4 部署（任务 1 Worker 拆分 + 任务 2 DRBD→rsync 同时执行）
+Week 1-2: PENDING_TIMEOUT 灰度（任务 4）
+Week 2-12: V1.3.1.1 / V1.4 共存期（Worker 进程双轨）
+Week 12:  关闭 V1.3.1.1 兼容接口，下线 OssReadOnly 适配器
+Month 3 末: OssSignedUrl 字段清理（任务 5）
+```
 
 ---
 
@@ -2076,6 +2994,9 @@ Authorization: Bearer {device_token}
 | **本地存储磁盘满（V1.3 新增）** | **RB-STORAGE-DISK-FULL** | `runbooks/storage-disk-full.md` |
 | **存储后端故障恢复（V1.3 新增）** | **RB-STORAGE-BACKEND-RECOVER** | `runbooks/storage-backend-recover.md` |
 | **V1.2 → V1.3 渐进式迁移（V1.3 新增）** | **RB-V13-MIGRATION** | `runbooks/v13-migration.md` |
+| **V1.3.1.1 → V1.4 1:1 进程模型迁移（V1.4 新增）** | **RB-V14-WORKER-MULTI-PROCESS** | `runbooks/v14-worker-multi-process.md` |
+| **V1.3.1 → V1.4 DRBD 替换为 rsync（V1.4 新增）** | **RB-V14-DRBD-TO-RSYNC** | `runbooks/v14-drbd-to-rsync.md` |
+| **USB adb reverse 基准测试（V1.4 新增）** | **RB-V14-USB-BENCHMARK** | `runbooks/v14-usb-benchmark.md` |
 
 ---
 
@@ -2111,16 +3032,33 @@ Authorization: Bearer {device_token}
 - **Q14.** V1.2 → V1.3 渐进式迁移期 3 个月是否足够清空 V1.2 历史 `file_url` 事务？（影响 §12 双轨并行时长；需结合客户实际业务回看周期）
 - **Q15.** 未来切换 `OssStorageBackend` 时，是否需要支持"事务中"切换（即事务进行中也能无缝跨后端）？（影响 `StorageBackend` 接口是否需引入"事务性"约束；当前实现按事务级隔离，事务内不切换）
 
+### V1.3.1 office-hours 评审闭环新增开放问题
+
+- **Q16. URL 签名机制选型**（V1.3.1 已决策：HMAC-SHA256 + KMS 托管密钥，详见 §9.1；**实施时**验证 KMS IAM 权限最小化、密钥轮转过渡期 7 天是否合理）
+- **Q17. LocalStorageBackend 灾备方案**（V1.3.1 决策 DRBD active-passive + Pacemaker；**V1.4 修订**：MVP 用 rsync + 手动切换，详见 §7.9；**实施时**确认 rsync 同步延迟 ≤ 5min、SLB 切流演练 ≤ 10min）
+- **Q18. MinIO 替代方案是否中期引入**（V1.3.1 保持 DRBD；**V1.4 修订**：MVP 用 rsync，V1.4+ 中期切 MinIO 集群，详见 §7.9；业务量超 2000 笔/日时重新评估）
+- **Q19. 1TB SSD 是否经得起业务量扩展**（V1.3.1 已决策：MVP 阶段 1TB × 2 实例可撑 4 年，详见 §8.7；**业务方**确认 MVP 阶段 ≤ 2000 笔/日的容量假设）
+
+### V1.4 autoplan 评审新增开放问题
+
+- **Q20. PENDING_TIMEOUT 阈值（10min）是否合理？**（V1.4 决策默认 10min 可配置；待业务方验证 UX）
+- **Q21. 1:1 进程模型下，同台电脑 2-3 Worker 进程运维复杂度？**（V1.4 决策接受；待运维方确认）
+- **Q22. rsync 5min RPO 是否在业务容忍范围？**（V1.4 决策可接受；待业务方确认影像可重建性）
+- **Q23. USB adb reverse 在生产环境的稳定性？**（V1.4 决策预生产基准通过后部署；<1MB/s 切站点 VPN；待运维方实地验证）
+
 ---
 
-## 15. 关联文档（V1.2 新增，V1.3 扩展）
+## 15. 关联文档（V1.2 新增，V1.3 扩展，V1.3.1 补充）
 
 | 文档 | 路径 | 关系 |
 |------|------|------|
 | **架构设计文档（V1.2 依据）** | `docs/superpowers/specs/2026-06-03-rpa-worker-side-architecture-design.md` | V1.2 的技术决策来源 |
 | 前一版本 PRD | `docs/superpowers/specs/2026-06-02-prd-design.md`（V1.1） | V1.2 / V1.3 的修订基础 |
 | V1.2 PRD | `docs/superpowers/specs/2026-06-04-prd-design.md` | V1.3 的直接修订基础；V1.3 沿用 V1.2 架构 + 应用存储调整 |
-| PRD 评审意见 | `docs/superpowers/specs/2026-06-02-prd-review.md` | V1.1 评审结论 |
+| **V1.3.1 PRD（本文档）** | `docs/superpowers/specs/2026-06-05-prd-design.md` | **当前版本（V1.4）**；V1.3 patch 升级，应用 office-hours 评审闭环 + V1.4 autoplan 评审闭环 |
+| **V1.3 office-hours 评审** | `docs/superpowers/specs/2026-06-05-prd-review.md` | **V1.3.1 修订依据**；4 高危 + 5 中低危 + 8 小修 + 7 缺失章节 + 4 替代方案 |
+| **V1.4 autoplan 评审** | `docs/superpowers/specs/2026-06-05-prd-autoplan.md` | **V1.4 修订依据**；4 高危（Worker 1:1 / USB 基准 / PENDING 超时 / DRBD 简化）+ 3 小修（OssSignedUrl 去重 / Multipart 原子性 / 开放问题阻塞项）|
+| V1.1 评审意见 | `docs/superpowers/specs/2026-06-02-prd-review.md` | V1.1 评审结论 |
 | Airtest 选型对比 | `docs/superpowers/specs/2026-06-03-airtest-vs-autoxjs-comparison.md` | Airtest 选型依据 |
 | Android 设备 Airtest 架构（旧） | `docs/superpowers/specs/2026-06-03-android-device-airtest-architecture-design.md` | V1.1 架构，V1.2 保留为 Plan B |
 | Android 设备 AutoXjs 架构 | `docs/superpowers/specs/2026-06-03-android-device-autoxjs-architecture-design.md` | 备选方案 |
