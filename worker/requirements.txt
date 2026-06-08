@@ -1,0 +1,5 @@
+airtest==1.2.16
+pocoui==1.0.35
+requests==2.32.3
+pyyaml==6.0.2
+websocket-client==1.8.0
