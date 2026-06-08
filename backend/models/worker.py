@@ -23,3 +23,4 @@ class Worker(Base):
     status = Column(Enum(WorkerStatus), default=WorkerStatus.OFFLINE)
     last_heartbeat_at = Column(DateTime(timezone=True), nullable=True)
     registered_at = Column(DateTime(timezone=True), nullable=True)
+    token = Column(String(64), nullable=True)

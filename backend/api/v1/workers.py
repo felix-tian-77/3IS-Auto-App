@@ -49,6 +49,7 @@ async def register_worker(request: WorkerRegisterRequest, db: AsyncSession = Dep
         status=WorkerStatus.ONLINE,
         registered_at=datetime.utcnow(),
         last_heartbeat_at=datetime.utcnow(),
+        token=token,
     )
     db.add(worker)
 

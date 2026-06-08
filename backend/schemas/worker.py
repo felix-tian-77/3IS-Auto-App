@@ -1,14 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
 class WorkerRegisterRequest(BaseModel):
-    fingerprint: str
-    hostname: str
-    ip_address: str
+    fingerprint: str = Field(min_length=1)
+    hostname: str = Field(min_length=1)
+    ip_address: str = Field(min_length=1)
     version: str
     tags: Optional[dict] = {}
-    adb_serial: str
+    adb_serial: str = Field(min_length=1)
     port: int = 8765
 
 class WorkerRegisterResponse(BaseModel):
