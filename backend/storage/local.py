@@ -1,7 +1,5 @@
 import os
-import hashlib
 import aiofiles
-from datetime import datetime
 from pathlib import Path
 from backend.storage.base import StorageBackend
 from backend.config import get_settings
@@ -12,31 +10,40 @@ class LocalStorageBackend(StorageBackend):
         self.base_path = base_path or settings.storage_local_path
         Path(self.base_path).mkdir(parents=True, exist_ok=True)
 
-    def _get_full_path(self, customer_id: str, attachment_id: str, filename: str) -> Path:
-        return Path(self.base_path) / customer_id / attachment_id / filename
+    def _validate_key(self, key: str) -> None:
+        """Validate key to prevent path traversal attacks"""
+        full_path = Path(self.base_path) / key
+        resolved = full_path.resolve()
+        base_resolved = Path(self.base_path).resolve()
+        if not str(resolved).startswith(str(base_resolved) + os.sep):
+            raise ValueError(f"Invalid key: path traversal detected in {key}")
 
     async def put(self, key: str, data: bytes, content_type: str) -> str:
         """key format: {customer_id}/{attachment_id}/{filename}"""
+        self._validate_key(key)
         full_path = Path(self.base_path) / key
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiofiles.open(full_path, 'wb') as f:
+        async with aiofiles.open(full_path, "wb") as f:
             await f.write(data)
         return f"local://{key}"
 
     async def get(self, key: str) -> bytes:
+        self._validate_key(key)
         full_path = Path(self.base_path) / key
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {key}")
-        async with aiofiles.open(full_path, 'rb') as f:
+        async with aiofiles.open(full_path, "rb") as f:
             return await f.read()
 
     async def generate_signed_url(self, key: str, ttl_seconds: int) -> str:
         return f"/api/v1/downloads/{key}"
 
     async def delete(self, key: str) -> None:
+        self._validate_key(key)
         full_path = Path(self.base_path) / key
         if full_path.exists():
             full_path.unlink()
 
     async def exists(self, key: str) -> bool:
+        self._validate_key(key)
         return (Path(self.base_path) / key).exists()
