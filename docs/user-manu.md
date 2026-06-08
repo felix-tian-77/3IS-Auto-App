@@ -318,3 +318,93 @@ worker/
 > **注**：`.env` 文件由用户根据 3.3 节自行创建，未包含在项目仓库中。
 
 ---
+
+## 4. Device 安装
+
+Device 是简化的 Android Agent，负责:
+- 通过 Socket 接收 Worker 的下载指令
+- 从 Backend 下载影像文件
+- 向 Backend 报告状态
+
+### 4.1 APK 安装
+
+Device Agent APK 文件位于项目根目录或由开发团队提供。
+
+```bash
+# 连接 Android 设备
+adb devices
+
+# 安装 APK
+adb install device-app.apk
+
+# 或推送 APK 到设备后手动安装
+adb push device-app.apk /sdcard/
+```
+
+### 4.2 配置 Device
+
+创建设备配置文件 `device/.env`:
+
+```env
+# Worker 连接 (局域网)
+WORKER_HOST=192.168.1.100
+WORKER_PORT=8765
+
+# Backend 连接
+BACKEND_URL=http://localhost:8000
+
+# 设备标识
+DEVICE_ID=device-001
+```
+
+### 4.3 启动 Device Agent
+
+**方式 1: 通过 ADB 启动**
+```bash
+adb shell am start -n com.example.deviceagent/.MainActivity
+```
+
+**方式 2: 通过设备屏幕点击启动**
+- 找到 Device Agent 图标
+- 点击启动应用
+
+**方式 3: 设备端命令行**
+```bash
+# 在设备上执行
+am start -n com.example.deviceagent/.MainActivity
+```
+
+### 4.4 验证 Device 在线
+
+```bash
+# 检查 Backend 注册的设备列表
+curl http://localhost:8000/api/v1/devices
+
+# 预期: 返回设备状态列表
+```
+
+### 4.5 Device Socket 连接说明
+
+Device 通过局域网 Socket 连接到 Worker:
+
+```
+Device (Android)  ──── Socket :8765 ────  Worker (Desktop)
+```
+
+**前提条件:**
+- Device 与 Worker 在同一局域网
+- Worker 已启动并监听端口
+- `WORKER_HOST` 配置为 Worker 的 IP 地址
+
+### 4.6 Device 目录结构
+
+```
+device/
+├── main.py             # Device 入口程序
+├── downloader.py       # 文件下载模块
+├── socket_client.py    # Socket 客户端
+├── requirements.txt    # Python 依赖
+└── .env # 环境变量 (本地创建)
+```
+
+---
