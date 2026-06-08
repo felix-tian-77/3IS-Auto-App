@@ -2,6 +2,7 @@ import os
 import sys
 import requests
 import logging
+from datetime import datetime
 from downloader import Downloader
 from socket_client import SocketClient
 
@@ -35,7 +36,7 @@ class Device:
         data = {
             "transaction_id": transaction_id,
             "files": files,
-            "completed_at": "2026-06-08T10:00:00Z",
+            "completed_at": datetime.utcnow().isoformat() + "Z",
         }
         try:
             resp = requests.post(url, json=data)

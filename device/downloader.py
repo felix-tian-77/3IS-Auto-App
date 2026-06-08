@@ -33,7 +33,7 @@ class Downloader:
             logger.info(f"Downloaded file to {local_path}")
             return True
 
-        except Exception as e:
+        except (requests.ConnectionError, requests.Timeout, requests.RequestException) as e:
             logger.error(f"Download failed: {e}")
             return False
 
