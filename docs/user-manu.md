@@ -641,7 +641,7 @@ docker logs <container_name>
 │
 ├── worker/
 │   ├── __init__.py          # 包初始化文件
-│   ├── main.py # Worker 入口
+│   ├── main.py             # Worker 入口
 │   ├── config.py           # 配置管理
 │   ├── device_controller.py  # ADB 设备控制
 │   ├── airtest_executor.py  # Airtest 执行器
@@ -705,8 +705,8 @@ python scripts/test_integration.py
 
 ### 9.3 相关文档
 
-- [PRD 设计文档](./specs/2026-06-05-prd-design.md) - 产品需求说明书
-- [架构设计](./specs/) - 详细架构文档
+- [PRD 设计文档](./superpowers/specs/2026-06-05-prd-design.md) - 产品需求说明书
+- [架构设计](./superpowers/specs/) - 详细架构文档
 
 ---
 
