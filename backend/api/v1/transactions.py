@@ -1,10 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from typing import List, Optional
+from enum import Enum
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.database import get_db
 from backend.services.transaction_service import TransactionService
 from backend.schemas.transaction import TransactionResponse, TransactionCreateRequest
 import json
+
+class TransactionErrorType(str, Enum):
+    MULTIPART_PARTIAL_FAIL = "MULTIPART_PARTIAL_FAIL"
+    MD5_MISMATCH = "MD5_MISMATCH"
+    FILE_MISSING = "FILE_MISSING"
+
 
 router = APIRouter()
 
@@ -18,9 +25,13 @@ async def create_transaction(
     request = TransactionCreateRequest(**txn_data)
 
     file_data_list = []
+    uploaded_ids = []
+    failed_ids = []
     for idx, f in enumerate(files):
         content = await f.read()
         file_meta = txn_data["attachments_meta"][idx] if idx < len(txn_data["attachments_meta"]) else {}
+        attachment_id = f"ATT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{idx:04d}"
+        uploaded_ids.append(attachment_id)
         file_data_list.append((
             {
                 "filename": f.filename,
@@ -31,6 +42,21 @@ async def create_transaction(
             },
             content
         ))
+
+    expected_count = len(txn_data.get("attachments_meta", []))
+    if len(files) < expected_count:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": TransactionErrorType.FILE_MISSING.value,
+                "message": f"Expected {expected_count} files but received {len(files)}",
+                "details": {
+                    "uploaded": uploaded_ids,
+                    "failed": [],
+                    "cleanup_status": "is_orphan=true, GC in 24h"
+                }
+            }
+        )
 
     service = TransactionService(db)
     result = await service.create_transaction(request, file_data_list)

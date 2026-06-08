@@ -2,6 +2,7 @@ import uuid
 import hashlib
 from datetime import datetime
 from typing import List
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.transaction import Transaction, TransactionStatus, BusinessType
 from backend.models.attachment import Attachment, FileType, FileFormat, StorageBackendType
@@ -59,10 +60,15 @@ class TransactionService:
 
         await self.db.commit()
 
+        pending_result = await self.db.execute(select(Transaction).where(Transaction.status == TransactionStatus.PENDING))
+        pending_count = len(pending_result.scalars().all())
+        estimated_wait = pending_count * 30
+
         return {
             "transaction_id": transaction_id,
             "status": "PENDING",
             "submitted_at": datetime.utcnow().isoformat(),
+            "estimated_wait": estimated_wait,
             "attachments": [
                 {
                     "attachment_id": a.attachment_id,
