@@ -37,8 +37,14 @@ class DeviceController:
 
     def get_device_info(self) -> dict:
         """Get device info"""
+        try:
+            battery_output = self.shell("dumpsys battery | grep level")
+            battery_level = int(battery_output.split(":")[1].strip()) if ":" in battery_output else 0
+        except (IndexError, ValueError):
+            battery_level = 0
+
         return {
             "model": self.shell("getprop ro.product.model"),
             "android_version": self.shell("getprop ro.build.version.release"),
-            "battery_level": int(self.shell("dumpsys battery | grep level").split(":")[1].strip()),
+            "battery_level": battery_level,
         }

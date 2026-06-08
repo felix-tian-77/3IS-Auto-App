@@ -1,5 +1,7 @@
 import sys
 import time
+import socket
+import hashlib
 import requests
 import logging
 from device_controller import DeviceController
@@ -8,6 +10,14 @@ from config import config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def get_fingerprint():
+    return hashlib.md5(socket.gethostname().encode()).hexdigest()
+
+
+def get_ip_address():
+    return socket.gethostbyname(socket.gethostname())
 
 class Worker:
     def __init__(self):
@@ -21,9 +31,9 @@ class Worker:
         """Register worker with backend"""
         url = f"{config.BACKEND_URL}/api/v1/workers/register"
         data = {
-            "fingerprint": "worker-fp-123",
-            "hostname": "worker-host",
-            "ip_address": "192.168.1.100",
+            "fingerprint": get_fingerprint(),
+            "hostname": socket.gethostname(),
+            "ip_address": get_ip_address(),
             "version": "1.0.0",
             "tags": {},
             "adb_serial": self.adb_serial,
@@ -41,6 +51,9 @@ class Worker:
             logger.error(f"Registration failed: {e}")
         return False
 
+    def get_headers(self):
+        return {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
     def send_heartbeat(self):
         """Send heartbeat to backend"""
         url = f"{config.BACKEND_URL}/api/v1/workers/heartbeat"
@@ -48,10 +61,8 @@ class Worker:
             resp = requests.post(
                 url,
                 params={"worker_id": self.worker_id},
-                json={
-                    "cpu_usage": 0.3,
-                    "memory_usage": 0.5,
-                },
+                json={"cpu_usage": 0.3, "memory_usage": 0.5},
+                headers=self.get_headers(),
             )
             return resp.status_code == 200
         except Exception as e:
@@ -62,7 +73,11 @@ class Worker:
         """Poll for tasks from backend"""
         url = f"{config.BACKEND_URL}/api/v1/tasks/poll"
         try:
-            resp = requests.get(url, params={"worker_id": self.worker_id})
+            resp = requests.get(
+                url,
+                params={"worker_id": self.worker_id},
+                headers=self.get_headers(),
+            )
             if resp.status_code == 200:
                 return resp.json()
         except Exception as e:
