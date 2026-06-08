@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -17,7 +17,7 @@ storage = LocalStorageBackend()
 url_service = URLSignatureService()
 
 @router.post("/transactions/{transaction_id}/download-urls")
-async def generate_download_urls(transaction_id: str, db: AsyncSession = Depends(get_db)):
+async def generate_download_urls(transaction_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     dispatcher = DispatcherService(db)
     assignment = await dispatcher.assign_transaction(transaction_id)
 
@@ -26,22 +26,24 @@ async def generate_download_urls(transaction_id: str, db: AsyncSession = Depends
     )
     attachments = result.scalars().all()
 
+    base = f"{request.url.scheme}://{request.url.netloc}"
     download_urls = []
     expires_at = int(time.time()) + 300
 
     for att in attachments:
         url_id = f"DURL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
         url_path = f"/api/v1/downloads/{url_id}"
+        customer_id = att.customer_id or "default"
 
         token = url_service.generate_token(
             url_path=url_path,
             expires_at=expires_at,
             device_id=assignment.get("device_id", ""),
             attachment_id=att.attachment_id,
-            customer_id=att.customer_id or "default"
+            customer_id=customer_id,
         )
 
-        signed_url = f"http://localhost:8000{url_path}?token={token}&expires={expires_at}&device_id={assignment.get('device_id', '')}&attachment_id={att.attachment_id}&customer_id={att.customer_id or 'default'}"
+        signed_url = f"{base}{url_path}?token={token}&expires={expires_at}&device_id={assignment.get('device_id', '')}&attachment_id={att.attachment_id}&customer_id={customer_id}"
 
         download_url = DownloadUrl(
             url_id=url_id,
