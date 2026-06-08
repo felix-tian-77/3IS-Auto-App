@@ -36,7 +36,7 @@ class TransactionService:
         attachments = []
         for idx, (file_meta, file_data) in enumerate(files):
             attachment_id = self._generate_id("ATT")
-            file_md5 = hashlib.md5(file_data).hexdigest()
+            file_md5 = hashlib.sha256(file_data).hexdigest()
             filename = f"{attachment_id}_{file_meta['filename']}"
             storage_key = f"{customer_id}/{attachment_id}/{filename}"
 
