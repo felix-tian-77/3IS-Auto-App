@@ -71,3 +71,119 @@
 - Android SDK (含 ADB)
 - USB 数据线 (Device 连接 Worker)
 - 网络: Worker → Backend 出方向 443
+
+## 2. Backend 安装
+
+### 2.1 Docker Compose 方式 (推荐)
+
+```bash
+cd /data/workspaces/3IS-Auto-App
+docker-compose -f scripts/docker-compose.yaml up -d
+```
+
+**启动服务:**
+- `postgres`: PostgreSQL 16 + init_db.sql 初始化
+- `redis`: Redis 7 Stream 队列
+- `backend`: FastAPI 应用
+
+**验证服务:**
+```bash
+curl http://localhost:8000/health
+# 预期返回: {"status":"healthy"}
+```
+
+### 2.2 手动 Python 安装 (开发环境)
+
+```bash
+cd backend
+
+# 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 启动服务
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 2.3 环境变量配置
+
+创建 `backend/.env` 文件:
+
+```env
+# 数据库
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/3is_auto
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# 存储
+STORAGE_LOCAL_PATH=/data/attachments
+STORAGE_BACKEND=local
+
+# 安全
+JWT_SECRET=your-production-secret-here-change-me
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_HOURS=24
+
+# URL 签名
+HMAC_SECRET_KEY=your-hmac-secret-here-change-me
+
+# 超时配置
+DOWNLOAD_URL_TTL_SECONDS=300
+PENDING_TIMEOUT_SECONDS=600
+TRANSACTION_TIMEOUT_SECONDS=1800
+
+# 应用
+APP_NAME=3IS-Auto-App
+```
+
+### 2.4 Docker Compose 配置文件说明
+
+`services/docker-compose.yaml` 结构:
+
+```yaml
+version: "3.8"
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - attachments_data:/data/attachments
+```
+
+### 2.5 数据库初始化
+
+PostgreSQL 启动时自动执行 `scripts/init_db.sql`:
+- `workers` 表 - Worker 节点注册
+- `devices` 表 - Android 设备管理
+- `transactions` 表 - 事务记录
+- `attachments` 表 - 附件元数据
+- `download_urls` 表 - 下载 URL 管理
+- `flows` 表 - RPA 流程定义
+
+---
