@@ -400,11 +400,12 @@ Device (Android)  ──── Socket :8765 ────  Worker (Desktop)
 
 ```
 device/
-├── main.py             # Device 入口程序
-├── downloader.py       # 文件下载模块
-├── socket_client.py    # Socket 客户端
-├── requirements.txt    # Python 依赖
-└── .env # 环境变量 (本地创建)
+├── __init__.py
+├── main.py              # Device 入口程序
+├── downloader.py        # 文件下载模块
+├── socket_client.py     # Socket 客户端
+├── requirements.txt      # Python 依赖
+└── .env                 # 环境变量 (本地创建)
 ```
 
 ---
