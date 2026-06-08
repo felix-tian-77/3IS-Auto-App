@@ -187,3 +187,132 @@ PostgreSQL 启动时自动执行 `scripts/init_db.sql`:
 - `flows` 表 - RPA 流程定义
 
 ---
+
+## 3. Worker 安装
+
+Worker 是桌面端客户端，负责通过 Airtest 驱动 Android 设备执行 RPA 流程。
+
+### 3.1 Python 环境配置
+
+```bash
+cd worker
+
+# 创建虚拟环境 (推荐使用 UV)
+python -m venv .venv
+source .venv/bin/activate # Windows: .venv\Scripts\activate
+
+# 或使用 UV (更快的包管理)
+# pip install uv
+# uv venv
+# source .venv/bin/activate
+
+# 安装依赖
+pip install -r requirements.txt
+```
+
+**依赖说明:**
+- `airtest==1.2.16` - UI 自动化框架
+- `pocoui==1.0.35` - 跨平台控件识别库
+- `requests==2.32.3` - HTTP 客户端
+- `pyyaml==6.0.2` - 配置文件解析
+- `websocket-client==1.8.0` - WebSocket 通信
+
+### 3.2 Android SDK 与 ADB 配置
+
+```bash
+# 安装 Android SDK Platform Tools
+# 下载地址: https://developer.android.com/studio/releases/platform-tools
+
+# 验证 ADB 安装
+adb version
+# 预期输出: Android Debug Bridge version 1.0.41
+
+# 在 Android 设备上启用 USB 调试
+# 设置 → 开发者选项 → USB 调试 → 开启
+```
+
+### 3.3 配置 Worker
+
+创建 `worker/.env` 文件:
+
+```env
+# Backend 连接
+BACKEND_URL=http://localhost:8000
+
+# Worker 身份标识 (注册后自动获取)
+WORKER_ID=
+WORKER_TOKEN=
+
+# 设备绑定 (1:1 绑定)
+ADB_SERIAL=<your-device-serial>
+
+# Worker 监听端口 (默认 8765)
+WORKER_PORT=8765
+
+# 心跳间隔 (秒)
+HEARTBEAT_INTERVAL=30
+```
+
+### 3.4 获取设备序列号
+
+```bash
+# 连接 Android 设备后执行
+adb devices
+# 输出示例:
+# List of devices attached
+# RF8N1234567A    device
+
+# 使用序列号启动 Worker
+export ADB_SERIAL=RF8N1234567A
+```
+
+### 3.5 启动 Worker
+
+```bash
+source .venv/bin/activate
+export ADB_SERIAL=<device-serial>
+export BACKEND_URL=http://localhost:8000
+python worker/main.py
+```
+
+**预期输出:**
+```
+INFO: Worker starting with ADB serial: RF8N1234567A
+INFO: Worker registered: WKR-20260608-a1b2c3d4
+INFO: Worker started successfully
+```
+
+### 3.6 多 Worker 同机配置
+
+同一台电脑可启动多个 Worker 进程 (端口递增):
+
+```bash
+# Terminal 1 - Worker 1
+export ADB_SERIAL=DEVICE1_SERIAL
+export WORKER_PORT=8765
+python worker/main.py
+
+# Terminal 2 - Worker 2
+export ADB_SERIAL=DEVICE2_SERIAL
+export WORKER_PORT=8766
+python worker/main.py
+
+# Terminal 3 - Worker 3
+export ADB_SERIAL=DEVICE3_SERIAL
+export WORKER_PORT=8767
+python worker/main.py
+```
+
+### 3.7 Worker 目录结构
+
+```
+worker/
+├── main.py              # Worker 入口程序
+├── config.py            # 配置管理
+├── device_controller.py # ADB 设备控制
+├── airtest_executor.py  # Airtest 运行时
+├── requirements.txt    # Python 依赖
+└── .env                # 环境变量 (本地)
+```
+
+---
