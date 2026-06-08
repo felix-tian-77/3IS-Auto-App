@@ -307,12 +307,14 @@ python worker/main.py
 
 ```
 worker/
+├── __init__.py
 ├── main.py              # Worker 入口程序
 ├── config.py            # 配置管理
 ├── device_controller.py # ADB 设备控制
 ├── airtest_executor.py  # Airtest 运行时
-├── requirements.txt    # Python 依赖
-└── .env                # 环境变量 (本地)
+└── requirements.txt    # Python 依赖
 ```
+
+> **注**：`.env` 文件由用户根据 3.3 节自行创建，未包含在项目仓库中。
 
 ---
