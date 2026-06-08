@@ -612,3 +612,102 @@ docker logs <container_name>
 ```
 
 ---
+
+## 8. 文件结构参考
+
+```
+3is-auto-app/
+├── backend/
+│   ├── main.py              # FastAPI 入口
+│   ├── config.py            # 配置管理
+│   ├── api/v1/              # API 路由
+│   │   ├── transactions.py  # 事务接口
+│   │   ├── workers.py       # Worker 注册接口
+│   │   └── downloads.py     # 下载 URL 接口
+│   ├── models/              # SQLAlchemy 模型
+│   │   ├── transaction.py   # 事务模型
+│   │   ├── worker.py        # Worker 模型
+│   │   ├── device.py        # 设备模型
+│   │   └── attachment.py    # 附件模型
+│   ├── services/            # 业务逻辑
+│   │   ├── transaction_service.py
+│   │   ├── dispatcher_service.py
+│   │   └── url_signature_service.py
+│   ├── storage/             # 存储后端
+│   │   ├── base.py          # 存储抽象接口
+│   │   └── local.py         # 本地存储实现
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── worker/
+│   ├── __init__.py          # 包初始化文件
+│   ├── main.py # Worker 入口
+│   ├── config.py           # 配置管理
+│   ├── device_controller.py  # ADB 设备控制
+│   ├── airtest_executor.py  # Airtest 执行器
+│   └── requirements.txt
+│
+├── device/
+│   ├── __init__.py          # 包初始化文件
+│   ├── main.py             # Device 入口
+│   ├── downloader.py       # 文件下载
+│   ├── socket_client.py    # Socket 客户端
+│   └── requirements.txt
+│
+├── scripts/
+│   ├── docker-compose.yaml # Docker 编排
+│   ├── init_db.sql         # 数据库初始化
+│   └── test_integration.py  # 集成测试
+│
+├── docs/
+│   ├── user-manu.md        # 本文档
+│   └── specs/              # 设计文档
+│
+└── tests/                  # 测试代码
+```
+
+## 9. 下一步
+
+### 9.1 生产环境配置
+
+- [ ] 配置生产环境 JWT_SECRET 和 HMAC_SECRET_KEY
+- [ ] 配置 SSL/TLS 证书
+- [ ] 设置监控 (Prometheus/Grafana)
+- [ ] 配置日志收集 (Loki/ELK)
+
+### 9.2 运行测试
+
+```bash
+# 集成测试
+python scripts/test_integration.py
+
+# 预期输出:
+# ==================================================
+# 3IS-Auto-App MVP Integration Test
+# ==================================================
+#
+# --- Testing: Backend Health ---
+# ✓ Backend health check passed
+#
+# --- Testing: Worker Registration ---
+# ✓ Worker registered: WKR-20260608-xxxxxxx
+#
+# --- Testing: Transaction Creation ---
+# ✓ Transaction created: TXN-20260608-xxxxxxx
+#
+# ==================================================
+# Summary:
+#   Backend Health: PASS
+#   Worker Registration: PASS
+#   Transaction Creation: PASS
+# ==================================================
+```
+
+### 9.3 相关文档
+
+- [PRD 设计文档](./specs/2026-06-05-prd-design.md) - 产品需求说明书
+- [架构设计](./specs/) - 详细架构文档
+
+---
+
+**文档结束**
