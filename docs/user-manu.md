@@ -409,3 +409,75 @@ device/
 ```
 
 ---
+
+## 5. 配置指南
+
+### 5.1 Backend 环境变量详解
+
+| 变量名 | 默认值 | 必填 | 说明 |
+|--------|--------|------|------|
+| `DATABASE_URL` | `postgresql+asyncpg://...` | 是 | PostgreSQL 连接字符串 |
+| `REDIS_URL` | `redis://localhost:6379/0` | 是 | Redis 连接字符串 |
+| `STORAGE_LOCAL_PATH` | `/data/attachments` | 是 | 本地存储路径 |
+| `STORAGE_BACKEND` | `local` | 是 | 存储后端类型 (local/oss/minio) |
+| `JWT_SECRET` | - | 是 | JWT 签名密钥 (生产环境必改) |
+| `JWT_ALGORITHM` | `HS256` | 否 | JWT 算法 |
+| `JWT_EXPIRE_HOURS` | `24` | 否 | Token 过期时间 (小时) |
+| `HMAC_SECRET_KEY` | - | 是 | URL 签名密钥 (生产环境必改) |
+| `DOWNLOAD_URL_TTL_SECONDS` | `300` | 否 | 下载 URL 有效期 (5分钟) |
+| `PENDING_TIMEOUT_SECONDS` | `600` | 否 | PENDING 超时 (10分钟) |
+| `TRANSACTION_TIMEOUT_SECONDS` | `1800` | 否 | 事务超时 (30分钟) |
+| `APP_NAME` | `3IS-Auto-App` | 否 | 应用名称 |
+
+### 5.2 Worker 环境变量详解
+
+| 变量名 | 默认值 | 必填 | 说明 |
+|--------|--------|------|------|
+| `BACKEND_URL` | `http://localhost:8000` | 是 | Backend 服务地址 |
+| `WORKER_ID` | - | 否 | Worker ID (自动注册后获取) |
+| `WORKER_TOKEN` | - | 否 | Worker 认证 Token (自动获取) |
+| `ADB_SERIAL` | - | 是 | 绑定的 Android 设备序列号 |
+| `WORKER_PORT` | `8765` | 否 | Socket 监听端口 |
+| `HEARTBEAT_INTERVAL` | `30` | 否 | 心跳间隔 (秒) |
+
+### 5.3 Device 环境变量详解
+
+| 变量名 | 默认值 | 必填 | 说明 |
+|--------|--------|------|------|
+| `WORKER_HOST` | `192.168.1.100` | 是 | Worker IP 地址 |
+| `WORKER_PORT` | `8765` | 是 | Worker Socket 端口 |
+| `BACKEND_URL` | `http://localhost:8000` | 是 | Backend 服务地址 |
+| `DEVICE_ID` | `device-001` | 否 | 设备标识 (默认自动生成) |
+
+### 5.4 生产环境安全配置
+
+**重要: 生产环境必须修改以下密钥**
+
+```bash
+# Backend 生产环境
+export JWT_SECRET=$(python -c "import secrets; print(secrets.token_hex(32))")
+export HMAC_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+
+# Worker 生产环境
+export WORKER_TOKEN=<get-from-backend-registration>
+```
+
+### 5.5 网络拓扑配置
+
+**USB 反向网络 (默认)**
+
+Device 通过 USB ADB 反向网络访问 Backend:
+
+```
+Device → USB → Worker → Backend
+```
+
+**站点 VPN (备选)**
+
+如 USB 反向网络不可用,切换站点 VPN:
+
+```
+Device → VPN → Backend
+```
+
+---
