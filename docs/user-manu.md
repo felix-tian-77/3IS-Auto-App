@@ -481,3 +481,134 @@ Device → VPN → Backend
 ```
 
 ---
+
+## 6. 快速启动
+
+### 6.1 启动顺序
+
+```
+1. Backend (Docker Compose)
+2. Worker (Desktop)
+3. Device (Android)
+4. 提交测试事务
+```
+
+### 6.2 Step 1: 启动 Backend
+
+```bash
+# 启动所有服务
+docker-compose -f scripts/docker-compose.yaml up -d
+
+# 验证服务
+curl http://localhost:8000/health
+# {"status":"healthy"}
+
+# 查看日志
+docker logs -f <container_name>
+```
+
+### 6.3 Step 2: 启动 Worker
+
+```bash
+# Terminal
+cd worker
+source .venv/bin/activate
+
+export ADB_SERIAL=RF8N1234567A
+export BACKEND_URL=http://localhost:8000
+
+python worker/main.py
+```
+
+### 6.4 Step 3: 启动 Device
+
+在 Android 设备上启动 Device Agent 应用
+
+### 6.5 Step 4: 提交测试事务
+
+```bash
+# 单笔新保提交
+curl -X POST http://localhost:8000/api/v1/transactions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "business_type": "NEW",
+    "customer_phone": "13812345678",
+    "attachments_meta": [
+      {"file_type": "ID_CARD", "file_format": "JPG"},
+      {"file_type": "DRIVING_LICENSE", "file_format": "JPG"}
+    ]
+  }'
+
+# 响应示例:
+# {
+#   "transaction_id": "TXN-20260608-abc12345",
+#   "status": "PENDING",
+#   "submitted_at": "2026-06-08T10:00:00Z",
+#   "attachments": [...]
+# }
+```
+
+### 6.6 监控状态
+
+```bash
+# 查看事务状态
+curl http://localhost:8000/api/v1/transactions/<transaction_id>
+
+# 查看 Worker 列表
+curl http://localhost:8000/api/v1/workers
+
+# 查看设备列表
+curl http://localhost:8000/api/v1/devices
+
+# 查看下载 URL
+curl -X POST http://localhost:8000/api/v1/transactions/<transaction_id>/download-urls
+```
+
+---
+
+## 7. 故障排查
+
+### 7.1 常见问题
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| `ModuleNotFoundError: airtest` | 依赖未安装 | `pip install -r worker/requirements.txt` |
+| `ADB connection failed` | USB 调试未开启 | 在 Android 设置中启用 USB 调试 |
+| `Worker registration failed` | Backend 不可达 | 检查 `BACKEND_URL` 和防火墙 |
+| `Device socket connection refused` | 端口不匹配 | 确认 Worker 和 Device 的 `WORKER_PORT` 一致 |
+| `401 Unauthorized` on downloads | Token 过期或缺失 | 重启 Worker 重新注册 |
+| `curl: (7) Failed to connect` | Backend 未启动 | `docker-compose up -d` |
+| `psql: connection refused` | PostgreSQL 未启动 | 检查 Docker 容器状态 |
+
+### 7.2 网络检查清单
+
+- [ ] Worker 可访问 `BACKEND_URL:8000` (出方向 443)
+- [ ] Worker 与 Device 在同一局域网 (Socket 通信)
+- [ ] Device 可通过 USB 反向网络访问 Backend
+
+### 7.3 日志位置
+
+| 组件 | 日志位置 |
+|------|----------|
+| Backend | `docker logs <container>` |
+| Worker | 标准输出 (终端) |
+| Device | Android Logcat: `adb logcat` |
+
+### 7.4 网络诊断命令
+
+```bash
+# 检查 Worker → Backend 连接
+curl -v http://localhost:8000/health
+
+# 检查 ADB 设备连接
+adb devices
+
+# 检查端口占用
+netstat -an | grep 8765
+
+# 检查 Docker 容器
+docker ps
+docker logs <container_name>
+```
+
+---
