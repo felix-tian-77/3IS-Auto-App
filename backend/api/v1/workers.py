@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from datetime import datetime
+from sqlalchemy import select, func
+from datetime import datetime, timedelta
+from typing import List
 import uuid
 from backend.db.database import get_db
 from backend.models.worker import Worker, WorkerStatus
 from backend.models.device import Device, DeviceStatus, ADBStatus
+from backend.models.transaction import Transaction, TransactionStatus
 from backend.schemas.worker import WorkerRegisterRequest, WorkerRegisterResponse, WorkerHeartbeatRequest
 
 router = APIRouter()
@@ -97,3 +99,85 @@ async def worker_heartbeat(
 
     await db.commit()
     return {"status": "ok"}
+
+@router.get("/workers")
+async def list_workers(db: AsyncSession = Depends(get_db)):
+    HEARTBEAT_TIMEOUT = 60
+
+    result = await db.execute(select(Worker))
+    workers = result.scalars().all()
+
+    device_ids = [w.bound_device_id for w in workers if w.bound_device_id]
+    devices_by_id: dict = {}
+    if device_ids:
+        dev_result = await db.execute(
+            select(Device).where(Device.device_id.in_(device_ids))
+        )
+        for d in dev_result.scalars().all():
+            devices_by_id[d.device_id] = d
+
+    now = datetime.utcnow()
+    worker_list = []
+
+    for w in workers:
+        is_online = False
+        if w.last_heartbeat_at and w.status == WorkerStatus.ONLINE:
+            elapsed = (now - w.last_heartbeat_at).total_seconds()
+            is_online = elapsed < HEARTBEAT_TIMEOUT
+
+        device_data = None
+        if w.bound_device_id and w.bound_device_id in devices_by_id:
+            device = devices_by_id[w.bound_device_id]
+            device_data = {
+                "device_id": device.device_id,
+                "model": device.model,
+                "android_version": device.android_version,
+                "battery_level": device.battery_level,
+                "storage_free_mb": device.storage_free_mb,
+                "status": device.status.value,
+            }
+
+        worker_list.append({
+            "worker_id": w.worker_id,
+            "hostname": w.hostname,
+            "ip_address": w.ip_address,
+            "version": w.version,
+            "cpu_usage": w.cpu_usage,
+            "memory_usage": w.memory_usage,
+            "status": "ONLINE" if is_online else "OFFLINE",
+            "last_heartbeat_at": w.last_heartbeat_at.isoformat() if w.last_heartbeat_at else None,
+            "device": device_data,
+        })
+
+    processing_result = await db.execute(
+        select(func.count(Transaction.transaction_id)).where(
+            Transaction.status.in_([
+                TransactionStatus.DISPATCHED,
+                TransactionStatus.ADB_CONNECTING,
+                TransactionStatus.DOWNLOADING,
+                TransactionStatus.READY,
+                TransactionStatus.RUNNING,
+            ])
+        )
+    )
+    processing = processing_result.scalar() or 0
+
+    queued_result = await db.execute(
+        select(func.count(Transaction.transaction_id)).where(
+            Transaction.status == TransactionStatus.PENDING
+        )
+    )
+    queued = queued_result.scalar() or 0
+
+    online_count = sum(1 for w in worker_list if w["status"] == "ONLINE")
+    offline_count = len(worker_list) - online_count
+
+    return {
+        "workers": worker_list,
+        "stats": {
+            "online": online_count,
+            "offline": offline_count,
+            "processing": processing,
+            "queued": queued,
+        },
+    }

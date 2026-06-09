@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Enum, DateTime, Integer, Text, ForeignKey
+from sqlalchemy import Column, String, Enum, DateTime, Integer, Text, ForeignKey, Index
 from sqlalchemy.sql import func
 from backend.db.database import Base
 import enum
@@ -27,6 +27,7 @@ class Transaction(Base):
     business_type = Column(Enum(BusinessType), nullable=False)
     status = Column(Enum(TransactionStatus), default=TransactionStatus.PENDING)
     customer_phone_encrypted = Column(String(256), nullable=True)
+    customer_phone_search = Column(String(20), nullable=True, index=True)
     customer_id_no_encrypted = Column(String(256), nullable=True)
     submitted_by = Column(String, nullable=True)
     flow_id = Column(String, ForeignKey("flows.flow_id"), nullable=True)

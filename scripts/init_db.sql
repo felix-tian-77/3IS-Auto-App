@@ -52,6 +52,7 @@ CREATE TABLE transactions (
     business_type VARCHAR(20),
     status VARCHAR(20) DEFAULT 'PENDING',
     customer_phone_encrypted VARCHAR(256),
+    customer_phone_search VARCHAR(20),
     customer_id_no_encrypted VARCHAR(256),
     submitted_by VARCHAR(128),
     flow_id VARCHAR(32),
@@ -95,6 +96,7 @@ CREATE TABLE download_urls (
 -- Indexes
 CREATE INDEX idx_transactions_status ON transactions(status);
 CREATE INDEX idx_transactions_worker ON transactions(worker_id);
+CREATE INDEX idx_transactions_phone_search ON transactions(customer_phone_search);
 CREATE INDEX idx_attachments_transaction ON attachments(transaction_id);
 CREATE INDEX idx_download_urls_transaction ON download_urls(transaction_id);
 CREATE INDEX idx_devices_adb_serial ON devices(adb_serial);

@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from typing import List, Optional
 from enum import Enum
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, or_, and_
 from backend.db.database import get_db
+from backend.models.transaction import Transaction, TransactionStatus, BusinessType
 from backend.services.transaction_service import TransactionService
 from backend.schemas.transaction import TransactionResponse, TransactionCreateRequest
 import json
@@ -62,6 +64,68 @@ async def create_transaction(
     service = TransactionService(db)
     result = await service.create_transaction(request, file_data_list)
     return result
+
+@router.get("/transactions")
+async def list_transactions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    business_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Transaction)
+    count_query = select(func.count(Transaction.transaction_id))
+
+    conditions = []
+    if search:
+        search_filter = or_(
+            Transaction.customer_phone_search.contains(search),
+            Transaction.transaction_id.contains(search),
+        )
+        conditions.append(search_filter)
+    if status:
+        try:
+            conditions.append(Transaction.status == TransactionStatus(status))
+        except ValueError:
+            pass
+    if business_type:
+        try:
+            conditions.append(Transaction.business_type == BusinessType(business_type))
+        except ValueError:
+            pass
+
+    if conditions:
+        query = query.where(and_(*conditions))
+        count_query = count_query.where(and_(*conditions))
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    offset = (page - 1) * page_size
+    query = query.order_by(Transaction.created_at.desc()).offset(offset).limit(page_size)
+    result = await db.execute(query)
+    txns = result.scalars().all()
+
+    items = []
+    for t in txns:
+        items.append({
+            "transaction_id": t.transaction_id,
+            "business_type": t.business_type.value,
+            "status": t.status.value,
+            "customer_phone_encrypted": t.customer_phone_encrypted,
+            "retry_count": t.retry_count,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "started_at": t.started_at.isoformat() if t.started_at else None,
+            "finished_at": t.finished_at.isoformat() if t.finished_at else None,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 @router.get("/transactions/{transaction_id}")
 async def get_transaction(transaction_id: str, db: AsyncSession = Depends(get_db)):

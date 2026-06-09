@@ -28,6 +28,7 @@ class TransactionService:
             business_type=business_type,
             status=TransactionStatus.PENDING,
             customer_phone_encrypted=request.customer_phone,
+            customer_phone_search=request.customer_phone,
             customer_id_no_encrypted=request.customer_id_no,
             submitted_by=customer_id,
         )
