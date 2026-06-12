@@ -79,7 +79,8 @@ class Worker:
                 headers=self.get_headers(),
             )
             if resp.status_code == 200:
-                return resp.json()
+                data = resp.json()
+                return data.get("task") if isinstance(data, dict) else None
         except Exception as e:
             logger.error(f"Task poll failed: {e}")
         return None

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 import uuid
 from backend.db.database import get_db
@@ -36,24 +36,41 @@ async def register_worker(request: WorkerRegisterRequest, db: AsyncSession = Dep
         device.status = DeviceStatus.ONLINE
         device.adb_status = ADBStatus.CONNECTED
 
-    worker_id = generate_worker_id()
-    token = uuid.uuid4().hex
-
-    worker = Worker(
-        worker_id=worker_id,
-        fingerprint=request.fingerprint,
-        hostname=request.hostname,
-        ip_address=request.ip_address,
-        version=request.version,
-        tags=str(request.tags),
-        bound_device_id=device_id,
-        port=request.port,
-        status=WorkerStatus.ONLINE,
-        registered_at=datetime.utcnow(),
-        last_heartbeat_at=datetime.utcnow(),
-        token=token,
+    existing_result = await db.execute(
+        select(Worker).where(Worker.fingerprint == request.fingerprint)
     )
-    db.add(worker)
+    worker = existing_result.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+
+    if worker is not None:
+        worker.hostname = request.hostname
+        worker.ip_address = request.ip_address
+        worker.version = request.version
+        worker.tags = str(request.tags)
+        worker.bound_device_id = device_id
+        worker.port = request.port
+        worker.status = WorkerStatus.ONLINE
+        worker.last_heartbeat_at = now
+        worker_id = worker.worker_id
+        token = worker.token
+    else:
+        worker_id = generate_worker_id()
+        token = uuid.uuid4().hex
+        worker = Worker(
+            worker_id=worker_id,
+            fingerprint=request.fingerprint,
+            hostname=request.hostname,
+            ip_address=request.ip_address,
+            version=request.version,
+            tags=str(request.tags),
+            bound_device_id=device_id,
+            port=request.port,
+            status=WorkerStatus.ONLINE,
+            registered_at=now,
+            last_heartbeat_at=now,
+            token=token,
+        )
+        db.add(worker)
 
     device.worker_id = worker_id
     await db.commit()
@@ -78,7 +95,7 @@ async def worker_heartbeat(
 
     worker.cpu_usage = request.cpu_usage
     worker.memory_usage = request.memory_usage
-    worker.last_heartbeat_at = datetime.utcnow()
+    worker.last_heartbeat_at = datetime.now(timezone.utc)
     worker.status = WorkerStatus.ONLINE
 
     if worker.bound_device_id:
@@ -95,7 +112,7 @@ async def worker_heartbeat(
                 device.screen_locked = request.screen_locked
             if request.adb_status:
                 device.adb_status = ADBStatus(request.adb_status)
-            device.last_seen_at = datetime.utcnow()
+            device.last_seen_at = datetime.now(timezone.utc)
 
     await db.commit()
     return {"status": "ok"}
@@ -116,13 +133,16 @@ async def list_workers(db: AsyncSession = Depends(get_db)):
         for d in dev_result.scalars().all():
             devices_by_id[d.device_id] = d
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     worker_list = []
 
     for w in workers:
         is_online = False
         if w.last_heartbeat_at and w.status == WorkerStatus.ONLINE:
-            elapsed = (now - w.last_heartbeat_at).total_seconds()
+            hb = w.last_heartbeat_at
+            if hb.tzinfo is None:
+                hb = hb.replace(tzinfo=timezone.utc)
+            elapsed = (now - hb).total_seconds()
             is_online = elapsed < HEARTBEAT_TIMEOUT
 
         device_data = None
