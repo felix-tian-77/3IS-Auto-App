@@ -25,6 +25,7 @@ class AttachmentResponse(BaseModel):
     description: Optional[str] = None
     file_size: int
     md5: str
+    sha256: str
     storage_backend: str
     storage_path: str
 

@@ -24,8 +24,8 @@ class Transaction(Base):
 
     transaction_id = Column(String(32), primary_key=True)
     external_id = Column(String(64), nullable=True)
-    business_type = Column(Enum(BusinessType), nullable=False)
-    status = Column(Enum(TransactionStatus), default=TransactionStatus.PENDING)
+    business_type = Column(String(16), nullable=False)
+    status = Column(String(20), default=TransactionStatus.PENDING.value)
     customer_phone_encrypted = Column(String(256), nullable=True)
     customer_phone_search = Column(String(20), nullable=True, index=True)
     customer_id_no_encrypted = Column(String(256), nullable=True)

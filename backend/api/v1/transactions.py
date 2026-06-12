@@ -85,15 +85,9 @@ async def list_transactions(
         )
         conditions.append(search_filter)
     if status:
-        try:
-            conditions.append(Transaction.status == TransactionStatus(status))
-        except ValueError:
-            pass
+        conditions.append(Transaction.status == status)
     if business_type:
-        try:
-            conditions.append(Transaction.business_type == BusinessType(business_type))
-        except ValueError:
-            pass
+        conditions.append(Transaction.business_type == business_type)
 
     if conditions:
         query = query.where(and_(*conditions))
@@ -111,8 +105,8 @@ async def list_transactions(
     for t in txns:
         items.append({
             "transaction_id": t.transaction_id,
-            "business_type": t.business_type.value,
-            "status": t.status.value,
+            "business_type": t.business_type,
+            "status": t.status,
             "customer_phone_encrypted": t.customer_phone_encrypted,
             "retry_count": t.retry_count,
             "created_at": t.created_at.isoformat() if t.created_at else None,
@@ -137,6 +131,6 @@ async def get_transaction(transaction_id: str, db: AsyncSession = Depends(get_db
         raise HTTPException(status_code=404, detail="Transaction not found")
     return {
         "transaction_id": txn.transaction_id,
-        "status": txn.status.value,
-        "business_type": txn.business_type.value,
+        "status": txn.status,
+        "business_type": txn.business_type,
     }

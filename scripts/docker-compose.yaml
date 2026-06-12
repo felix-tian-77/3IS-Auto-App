@@ -11,7 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ../scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -30,7 +30,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ../backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"

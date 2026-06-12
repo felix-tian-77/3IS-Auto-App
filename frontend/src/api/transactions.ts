@@ -12,9 +12,24 @@ export async function createTransaction(
   businessType: string,
   files: File[]
 ): Promise<CreateTransactionResponse> {
+  const inferFormat = (file: File): string => {
+    const type = file.type.toLowerCase();
+    if (type.includes('pdf')) return 'PDF';
+    if (type.includes('png')) return 'PNG';
+    return 'JPG';
+  };
+
+  const transactionPayload = {
+    business_type: businessType,
+    customer_phone: phone,
+    attachments_meta: files.map((f) => ({
+      file_type: 'OTHER',
+      file_format: inferFormat(f),
+    })),
+  };
+
   const formData = new FormData();
-  formData.append('customer_phone', phone);
-  formData.append('business_type', businessType);
+  formData.append('transaction', JSON.stringify(transactionPayload));
   files.forEach((file) => {
     formData.append('files', file);
   });

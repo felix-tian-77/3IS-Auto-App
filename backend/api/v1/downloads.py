@@ -59,6 +59,7 @@ async def generate_download_urls(transaction_id: str, request: Request, db: Asyn
             "attachment_id": att.attachment_id,
             "url": signed_url,
             "md5": att.md5,
+            "sha256": att.sha256,
             "expires_at": datetime.fromtimestamp(expires_at).isoformat(),
             "storage_backend": "local",
         })

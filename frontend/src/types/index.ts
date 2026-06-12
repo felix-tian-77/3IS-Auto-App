@@ -52,6 +52,7 @@ export interface Attachment {
   storage_path?: string;
   is_orphan: boolean;
   md5?: string;
+  sha256?: string;
   uploaded_at?: string;
   filename?: string;
   download_url?: string;
@@ -139,6 +140,6 @@ export interface WorkerListResponse {
 export interface CreateTransactionResponse {
   transaction_id: string;
   status: TransactionStatus;
-  estimated_wait_seconds?: number;
+  estimated_wait?: number;
   message?: string;
 }

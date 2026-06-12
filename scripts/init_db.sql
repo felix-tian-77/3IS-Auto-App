@@ -1,5 +1,5 @@
--- Create database
-CREATE DATABASE 3is_auto;
+-- Tables are created inside the database specified by POSTGRES_DB (3is_auto),
+-- which the postgres entrypoint connects to before running this script.
 
 -- Create tables (matches SQLAlchemy models)
 CREATE TABLE workers (
@@ -24,7 +24,8 @@ CREATE TABLE devices (
     sn VARCHAR(64) UNIQUE,
     worker_id VARCHAR(32),
     adb_serial VARCHAR(128),
-    sandbox_path VARCHAR(256) DEFAULT '/sdcard/sandbox/{txn_id}/',
+    sandbox_path VARCHAR(256) DEFAULT '/sdcard/sandbox/{txn_iuvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+d}/',
     model VARCHAR(128),
     android_version VARCHAR(32),
     battery_level INTEGER DEFAULT 100,
@@ -78,7 +79,8 @@ CREATE TABLE attachments (
     storage_backend VARCHAR(10) DEFAULT 'local',
     storage_path VARCHAR(512),
     is_orphan BOOLEAN DEFAULT FALSE,
-    md5 VARCHAR(64),
+    md5 VARCHAR(32),
+    sha256 VARCHAR(64),
     uploaded_at TIMESTAMP
 );
 
@@ -98,5 +100,6 @@ CREATE INDEX idx_transactions_status ON transactions(status);
 CREATE INDEX idx_transactions_worker ON transactions(worker_id);
 CREATE INDEX idx_transactions_phone_search ON transactions(customer_phone_search);
 CREATE INDEX idx_attachments_transaction ON attachments(transaction_id);
+CREATE INDEX idx_attachments_sha256 ON attachments(sha256);
 CREATE INDEX idx_download_urls_transaction ON download_urls(transaction_id);
 CREATE INDEX idx_devices_adb_serial ON devices(adb_serial);

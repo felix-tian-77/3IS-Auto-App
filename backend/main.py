@@ -1,9 +1,18 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.api.router import api_router
 from backend.db.database import engine, Base
 
-app = FastAPI(title="3IS-Auto-App Backend", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+app = FastAPI(title="3IS-Auto-App Backend", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,10 +24,6 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api/v1")
 
-@app.on_event("startup")
-async def startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
 @app.get("/health")
 async def health():

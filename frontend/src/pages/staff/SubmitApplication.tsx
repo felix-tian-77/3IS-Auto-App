@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Form, Input, Segmented, Button, App } from 'antd';
 import type { UploadFile } from 'antd';
+import { AxiosError } from 'axios';
 import FileUpload from '@/components/FileUpload';
 import { createTransaction } from '@/api/transactions';
 
@@ -11,8 +12,10 @@ export default function SubmitApplication() {
   const { message, notification } = App.useApp();
 
   const handleSubmit = async () => {
+    let validated = false;
     try {
       const values = await form.validateFields();
+      validated = true;
       if (fileList.length === 0) {
         message.error('请至少上传一个文件');
         return;
@@ -24,14 +27,27 @@ export default function SubmitApplication() {
       const businessType = values.business_type === '续保' ? 'RENEWAL' : 'NEW';
       const result = await createTransaction(values.phone, businessType, files);
       notification.success({
-        message: '提交成功',
-        description: `申请编号：${result.transaction_id}${result.estimated_wait_seconds ? `，预计等待 ${result.estimated_wait_seconds} 秒` : ''}`,
+        title: '提交成功',
+        description: `申请编号：${result.transaction_id}${result.estimated_wait ? `，预计等待 ${result.estimated_wait} 秒` : ''}`,
         duration: 6,
       });
       form.resetFields();
       setFileList([]);
-    } catch {
-      // validation error handled by antd form
+    } catch (err) {
+      if (!validated) {
+        return;
+      }
+      let description = '请稍后重试';
+      if (err instanceof AxiosError) {
+        description =
+          err.response?.data?.detail ||
+          err.response?.data?.message ||
+          err.message ||
+          description;
+      } else if (err instanceof Error) {
+        description = err.message;
+      }
+      notification.error({ title: '提交失败', description, duration: 6 });
     } finally {
       setSubmitting(false);
     }
