@@ -85,3 +85,50 @@ async def test_storage_key_uses_date_and_transaction_id(db_session, tmp_path, mo
         assert on_disk.read_bytes() == expected_bodies[idx]
 
     get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_storage_key_handles_missing_extension(db_session, tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_LOCAL_PATH", str(tmp_path))
+    get_settings.cache_clear()
+
+    service = TransactionService(db_session)
+    service.storage.base_path = str(tmp_path)
+
+    request = TransactionCreateRequest(
+        business_type=BusinessType.NEW,
+        customer_phone="13800000000",
+        customer_id_no="110101199001011234",
+        attachments_meta=[
+            AttachmentMeta(file_type="OTHER", file_format="OTHER"),
+        ],
+    )
+
+    files = [
+        (
+            {
+                "filename": "noext",
+                "content_type": "application/octet-stream",
+                "file_type": "OTHER",
+                "file_format": "OTHER",
+            },
+            b"raw-bytes",
+        ),
+    ]
+
+    result = await service.create_transaction(request, files, customer_id="cust-2")
+
+    transaction_id = result["transaction_id"]
+    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+    storage_path = result["attachments"][0]["storage_path"]
+    expected_key = f"{date_str}/{transaction_id}/{transaction_id}_001"
+    assert storage_path == expected_key, (
+        f"storage_path mismatch: got {storage_path!r}, expected {expected_key!r}"
+    )
+
+    on_disk = tmp_path / storage_path
+    assert on_disk.exists(), f"expected file on disk at {on_disk}"
+    assert on_disk.read_bytes() == b"raw-bytes"
+
+    get_settings.cache_clear()
