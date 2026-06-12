@@ -19,7 +19,7 @@ class LocalStorageBackend(StorageBackend):
             raise ValueError(f"Invalid key: path traversal detected in {key}")
 
     async def put(self, key: str, data: bytes, content_type: str) -> str:
-        """key format: {customer_id}/{attachment_id}/{filename}"""
+        """Store data at the given key (opaque path under base_path)."""
         self._validate_key(key)
         full_path = Path(self.base_path) / key
         full_path.parent.mkdir(parents=True, exist_ok=True)

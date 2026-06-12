@@ -1,4 +1,3 @@
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -64,7 +63,10 @@ async def test_storage_key_uses_date_and_transaction_id(db_session, tmp_path, mo
     result = await service.create_transaction(request, files, customer_id="cust-1")
 
     transaction_id = result["transaction_id"]
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    # Read date from actual response so this test is robust to UTC midnight crossings
+    date_str = result["attachments"][0]["storage_path"].split("/")[0]
+    # Sanity check the format
+    assert len(date_str) == 10 and date_str[4] == "-" and date_str[7] == "-"
 
     expected_suffixes = ["_001.jpg", "_002.png", "_003.pdf"]
     expected_bodies = [b"front-bytes", b"back-bytes", b"cert-bytes"]
@@ -118,9 +120,12 @@ async def test_storage_key_handles_missing_extension(db_session, tmp_path, monke
     result = await service.create_transaction(request, files, customer_id="cust-2")
 
     transaction_id = result["transaction_id"]
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
-
     storage_path = result["attachments"][0]["storage_path"]
+    # Read date from actual response so this test is robust to UTC midnight crossings
+    date_str = storage_path.split("/")[0]
+    # Sanity check the format
+    assert len(date_str) == 10 and date_str[4] == "-" and date_str[7] == "-"
+
     expected_key = f"{date_str}/{transaction_id}/{transaction_id}_001"
     assert storage_path == expected_key, (
         f"storage_path mismatch: got {storage_path!r}, expected {expected_key!r}"

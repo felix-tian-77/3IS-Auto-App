@@ -20,6 +20,7 @@ class TransactionService:
 
     async def create_transaction(self, request: TransactionCreateRequest,
                                  files: List[tuple], customer_id: str = "default") -> dict:
+        now = datetime.utcnow()
         transaction_id = self._generate_id("TXN")
 
         transaction = Transaction(
@@ -35,7 +36,7 @@ class TransactionService:
         self.db.add(transaction)
 
         attachments = []
-        date_str = datetime.utcnow().strftime("%Y-%m-%d")
+        date_str = now.strftime("%Y-%m-%d")
         for idx, (file_meta, file_data) in enumerate(files):
             attachment_id = self._generate_id("ATT")
             file_md5 = hashlib.md5(file_data).hexdigest()
@@ -58,7 +59,7 @@ class TransactionService:
                 storage_path=storage_key,
                 md5=file_md5,
                 sha256=file_sha256,
-                uploaded_at=datetime.utcnow(),
+                uploaded_at=now,
             )
             self.db.add(attachment)
             attachments.append(attachment)
@@ -68,7 +69,7 @@ class TransactionService:
         return {
             "transaction_id": transaction_id,
             "status": TransactionStatus.PENDING.value,
-            "submitted_at": datetime.utcnow().isoformat(),
+            "submitted_at": now.isoformat(),
             "estimated_wait": 0,
             "attachments": [
                 {
