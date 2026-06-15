@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/permission_title"
+        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/permission_body" />
+
+    <Button
+        android:id="@+id/btnGrant"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Grant storage permission" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Configuration"
+        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+    <EditText android:id="@+id/etWorkerHost" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Worker host" android:inputType="text" android:autofillHints="" />
+    <EditText android:id="@+id/etWorkerPort" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Worker port" android:inputType="number" android:autofillHints="" />
+    <EditText android:id="@+id/etBackendUrl" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Backend URL" android:inputType="textUri" android:autofillHints="" />
+    <EditText android:id="@+id/etDeviceId"   android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Device ID" android:inputType="text" android:autofillHints="" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal">
+
+        <Button android:id="@+id/btnSave"   android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/save" />
+        <Button android:id="@+id/btnStopService" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/stop" />
+    </LinearLayout>
+</LinearLayout>
