@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.db.database import get_db
 from backend.models.device import Device, DeviceStatus
+from backend.models.attachment import Attachment
 from backend.schemas.device import (
     DeviceReadyRequest,
     DeviceReadyResponse,
@@ -66,7 +67,6 @@ async def device_download_ack(
         next_state = "RETRY_REQUIRED"
 
     # Persist local_path back to the matching attachment rows
-    from backend.models.attachment import Attachment
     for f in req.files:
         att_result = await db.execute(
             select(Attachment).where(Attachment.attachment_id == f.attachment_id)
