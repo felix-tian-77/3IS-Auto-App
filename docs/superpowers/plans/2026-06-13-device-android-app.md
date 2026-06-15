@@ -188,11 +188,12 @@ git commit -m "feat(backend): add device Pydantic schemas for ready + download-a
 
 ---
 
-### Task T2: Backend — Update `Device.sandbox_path` default and add Alembic migration
+### Task T2: Backend — Update `Device.sandbox_path` default
+
+> **Amendment (mid-execution):** The original plan called for an Alembic migration, but the codebase does not use Alembic — schema is created via `Base.metadata.create_all()` in `backend/main.py:11` on app startup. `alembic` is in `pyproject.toml` but never initialized (no `alembic.ini`, no `migrations/` directory). The pragmatic move: change the Python-level `default=` on the model. New INSERTs through SQLAlchemy (which is the only path that creates `Device` rows) will pick up the new default automatically. Existing rows with the old default are out of scope for the MVP; the new T3 endpoint creates rows on first contact, and the old path `/sdcard/sandbox/{txn_id}/` is no longer used anywhere after T6 wires the new flow. If a backfill is needed later, run an ad-hoc SQL `UPDATE` then.
 
 **Files:**
 - Modify: `backend/models/device.py:23`
-- Create: `backend/migrations/versions/2026XXXX_update_device_sandbox_path.py`
 
 - [ ] **Step 1: Update the default sandbox path**
 
@@ -204,53 +205,29 @@ In `backend/models/device.py` change line 23:
 
 (Was: `default="/sdcard/sandbox/{txn_id}/"`.)
 
-- [ ] **Step 2: Run Alembic autogenerate**
+- [ ] **Step 2: Verify nothing else in the codebase hard-codes the old path**
+
+```bash
+cd /data/workspaces/3IS-Auto-App
+grep -rn "/sdcard/sandbox" backend/ worker/ --include="*.py" --include="*.md" | grep -v ".venv\|.pyc"
+```
+
+Expected: the only match is the one line you just changed (or any historical reference in `docs/` that doesn't affect code behavior). If other code references the old path, STOP and report BLOCKED.
+
+- [ ] **Step 3: Verify the model still imports cleanly**
 
 ```bash
 cd backend
-alembic revision --autogenerate -m "default device sandbox to /sdcard/3is/"
-ls ../backend/migrations/versions/   # note the new filename
+.venv/bin/python -c "from backend.models.device import Device; print(Device().sandbox_path)"
 ```
 
-Expected: a new migration file is created. It should alter `devices.sandbox_path` default. If Alembic does not detect a default change (SQLAlchemy default at the Python level does not always produce SQL), manually edit the migration:
+Expected: prints `/sdcard/3is/`.
 
-- [ ] **Step 3: Manually verify migration body (only if Alembic left it empty)**
-
-Open the generated file. If the `upgrade()` function body is empty, replace it with:
-
-```python
-from alembic import op
-import sqlalchemy as sa
-
-
-def upgrade() -> None:
-    # Backfill: any existing rows still on the old default
-    op.execute("UPDATE devices SET sandbox_path = '/sdcard/3is/' WHERE sandbox_path LIKE '/sdcard/sandbox/%'")
-    # Change the server-side default for future inserts
-    op.alter_column('devices', 'sandbox_path', server_default='/sdcard/3is/')
-
-
-def downgrade() -> None:
-    op.alter_column('devices', 'sandbox_path', server_default='/sdcard/sandbox/{txn_id}/')
-```
-
-(If Alembic already produced a valid `op.alter_column` call, leave it. Do not duplicate.)
-
-- [ ] **Step 4: Apply migration locally and verify**
-
-```bash
-alembic upgrade head
-alembic downgrade -1
-alembic upgrade head
-```
-
-Expected: no errors. The `devices` table is left in the new state.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 cd ..
-git add backend/models/device.py backend/migrations/versions/
+git add backend/models/device.py
 git commit -m "feat(backend): default device sandbox_path to /sdcard/3is/"
 ```
 
