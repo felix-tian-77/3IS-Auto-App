@@ -2,6 +2,7 @@ package com.threeis.deviceagent.download
 
 import com.threeis.deviceagent.data.DownloadResult
 import com.threeis.deviceagent.data.DownloadInstruction
+import com.threeis.deviceagent.data.UrlInfo
 import com.threeis.deviceagent.util.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,7 +41,7 @@ class Downloader(private val sandbox: SandboxManager) {
         Logger.d("download progress $current/$total $attachmentId")
     }
 
-    private fun downloadOne(info: com.threeis.deviceagent.data.UrlInfo): DownloadResult {
+    private fun downloadOne(info: UrlInfo): DownloadResult {
         val target = sandbox.pathFor(info.attachmentId, info.ext)
         val tmp = File(target.parentFile, "${info.attachmentId}.${info.ext}.part")
         return try {
@@ -65,6 +66,9 @@ class Downloader(private val sandbox: SandboxManager) {
                 }
                 DownloadResult(info.attachmentId, target.absolutePath, true)
             }
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            tmp.delete()
+            throw ce
         } catch (io: java.io.IOException) {
             tmp.delete()
             DownloadResult(info.attachmentId, target.absolutePath, false, "NETWORK_ERROR")
