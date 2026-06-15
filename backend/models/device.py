@@ -20,7 +20,7 @@ class Device(Base):
     sn = Column(String(64), unique=True, nullable=True)
     worker_id = Column(String(32), ForeignKey("workers.worker_id"), nullable=True)
     adb_serial = Column(String(128), nullable=True)
-    sandbox_path = Column(String(256), default="/sdcard/sandbox/{txn_id}/")
+    sandbox_path = Column(String(256), default="/sdcard/3is/")
     model = Column(String(128), nullable=True)
     android_version = Column(String(32), nullable=True)
     battery_level = Column(Integer, default=100)
