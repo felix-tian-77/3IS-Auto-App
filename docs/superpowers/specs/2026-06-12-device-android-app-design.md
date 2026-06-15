@@ -118,7 +118,7 @@ android/
 | `SocketClient` | TCP 连接、自动重连、按行读 JSON、回调 `onMessage` | 原生 `java.net.Socket` | 1 接收线程 |
 | `Downloader` | 单文件 GET → 临时文件 → MD5 校验 → 重命名;批量下载顺序执行,失败短路 | OkHttp | 同 Service 协程 |
 | `BackendApi` | `POST /devices/{id}/ready` + `POST /devices/{id}/download-ack` | OkHttp | 同上 |
-| `SandboxManager` | `clear()`、`pathFor(fileType, ext)` → 返回 `/sdcard/3is/<fileType>.<ext>` | `java.io.File` | 任意线程(简单同步) |
+| `SandboxManager` | `clear()`、`pathFor(attachmentId, ext)` → 返回 `/sdcard/3is/<attachmentId>.<ext>` | `java.io.File` | 任意线程(简单同步) |
 | `Config` | 从 BuildConfig + SharedPreferences 读取 4 项配置 | Android Preferences | 任意线程 |
 | `Logger` | 包 `android.util.Log`,统一 tag `3IS-Device` | — | 任意线程 |
 
@@ -142,7 +142,7 @@ class BackendApi {
 
 class SandboxManager {
     fun clear()
-    fun pathFor(fileType: String, ext: String): File
+    fun pathFor(attachmentId: String, ext: String): File
 }
 ```
 
@@ -168,14 +168,12 @@ class SandboxManager {
     "download_urls": [
       {
         "attachment_id": "att_9f8c1b2a",
-        "file_type": "idcard_front",
         "url": "https://backend.example.com/api/v1/downloads/{att_id}?token=<jwt>",
         "md5": "9e107d9d372bb6826bd81d3542a419d6",
         "ext": "jpg"
       },
       {
         "attachment_id": "att_3d4e5f60",
-        "file_type": "idcard_back",
         "url": "https://backend.example.com/api/v1/downloads/{att_id}?token=<jwt>",
         "md5": "8a08c4d3f9ab12...",
         "ext": "jpg"
@@ -189,9 +187,10 @@ class SandboxManager {
 
 - `transaction_id`:仅用于 download-ack 回传(沙箱不再分目录,Device 不依赖它写文件)
 - `attachment_id`:Backend 端 attachment 主键全量字符串;**Device 直接用作文件名主体**,保证全局唯一
-- `file_type`:业务语义标签(如 `idcard_front` / `idcard_back`),Device 仅原样回传到 ack,**不参与文件命名**;允许重复
 - `ext`:文件扩展名;**Worker 必须发送**(见 §3.6.2);若缺省,Device fallback 为 `bin`(仅作兼容兜底)
 - `md5`:必填,校验失败视为下载失败
+
+> 业务语义标签(原 `file_type`,如身份证正/反面)不在 Device 协议中传递;Backend 与 Worker 通过 `attachment_id` 自行解析归属,Device 端不需要也不消费此信息。
 
 文件命名规则(Device 端):
 
@@ -230,13 +229,11 @@ Content-Type: application/json
   "files": [
     {
       "attachment_id": "att_9f8c1b2a",
-      "file_type": "idcard_front",
       "local_path": "/sdcard/3is/att_9f8c1b2a.jpg",
       "success": true
     },
     {
       "attachment_id": "att_3d4e5f60",
-      "file_type": "idcard_back",
       "local_path": "/sdcard/3is/att_3d4e5f60.jpg",
       "success": true
     }
@@ -251,7 +248,6 @@ Content-Type: application/json
 - 任一文件失败:停止后续下载,失败项 `success=false`,后续未尝试项 `errorReason="SKIPPED_PRIOR_FAIL"`
 - `local_path` 始终为 `/sdcard/3is/<attachment_id>.<ext>`
 - `attachment_id` 必须回传(Backend 据此精确定位 attachment 记录,见 §3.6.3)
-- `file_type` 原样回传,便于 Backend 日志/审计阅读,**不参与定位**
 - `sandbox_clear_failed=true` 表示本次下载前 `SandboxManager.clear()` 抛 SecurityException 但 Device 仍尝试覆盖写入完成下载;Backend 应据此触发 Worker 用 ADB `rm -rf /sdcard/3is/*` 兜底清理(详见 §4.4)
 
 ### 3.3 Kotlin 数据类
@@ -259,7 +255,6 @@ Content-Type: application/json
 ```kotlin
 data class UrlInfo(
     val attachmentId: String,
-    val fileType: String,
     val url: String,
     val md5: String,
     val ext: String = "bin"
@@ -272,7 +267,6 @@ data class DownloadInstruction(
 
 data class DownloadResult(
     val attachmentId: String,
-    val fileType: String,
     val localPath: String,
     val success: Boolean,
     val errorReason: String? = null
@@ -321,7 +315,7 @@ Worker 在拼 `DOWNLOAD_FILES` 指令 JSON 时,**每个 `download_urls[]` 元素
 `download-ack` 请求体新增两个扩展字段(详见 §3.2.2 与 §4.4):
 
 - `sandbox_clear_failed: bool`(可选,默认 false) — Device 在本次下载前清沙箱失败时置 true,Backend 应据此决定是否触发 Worker 用 ADB `rm -rf` 兜底
-- `files[].attachment_id: string` — 对齐文件名后缀的 attachment 短 ID(见 §3.1.1 命名规则),Backend 据此把 `local_path` 写回对应 attachment 记录,而不是按 `file_type` 模糊匹配
+- `files[].attachment_id: string` — 文件名主体的 attachment ID(见 §3.1.1 命名规则),Backend 据此精确写回对应 attachment 记录
 
 ## 4. 生命周期 / 状态机
 
@@ -399,12 +393,12 @@ Service.onDownloadInstruction:             ▼
 suspend fun download(urls: List<UrlInfo>): List<DownloadResult> {
     val results = mutableListOf<DownloadResult>()
     for ((index, info) in urls.withIndex()) {
-        notifyProgress(index + 1, urls.size, info.fileType)
+        notifyProgress(index + 1, urls.size, info.attachmentId)
         val r = downloadOne(info)
         results += r
         if (!r.success) {
             urls.drop(index + 1).forEach {
-                results += DownloadResult(it.fileType, "", false, "SKIPPED_PRIOR_FAIL")
+                results += DownloadResult(it.attachmentId, "", false, "SKIPPED_PRIOR_FAIL")
             }
             return results
         }
@@ -473,7 +467,7 @@ suspend fun download(urls: List<UrlInfo>): List<DownloadResult> {
 | 1 | 首次安装 | `adb install app-debug.apk` → 点图标 | 弹"前往设置授权"页;授权后 Service 启动,通知栏显示 INITIALIZING |
 | 2 | Worker 离线启动 | Worker 未启动 → 启动 APP | 通知栏显示"无法连接 Worker · 重试中";logcat 见指数退避 |
 | 3 | Worker 上线连接 | 启动 Worker → APP 已运行 | ≤16s 内通知栏切到"已连接 · 待命中" |
-| 4 | 正常下载 | Worker 推 `DOWNLOAD_FILES`(2 文件,含同 `file_type=idcard_front` 不同 `attachment_id` 的反例验证) | `/sdcard/3is/` 出现 `<att_id1>.jpg` + `<att_id2>.jpg`,**两文件互不覆盖**;Backend 收到 `download-ack` 且 `all_success=true` |
+| 4 | 正常下载 | Worker 推 `DOWNLOAD_FILES`(2 个不同 `attachment_id` 的文件) | `/sdcard/3is/` 出现 `<att_id1>.jpg` + `<att_id2>.jpg`,**两文件互不覆盖**;Backend 收到 `download-ack` 且 `all_success=true` |
 | 5 | MD5 校验失败 | mock backend 返回错内容 | `download-ack` 中该项 `success=false errorReason=MD5_MISMATCH`;后续项 `SKIPPED_PRIOR_FAIL` |
 | 6 | 沙箱清理(下载前) | 跑 1 次下载 → 再跑 1 次下载 | 第二次下载开始前 `/sdcard/3is/` 仅有第二次的文件 |
 | 7 | 沙箱清理(服务重启) | 跑下载留下文件 → 强杀 APP → 重启 | `onCreate` 擦掉旧文件后再连接 |
@@ -495,7 +489,7 @@ msg = {
     "params": {
         "transaction_id": "TXN-MOCK-0001",
         "download_urls": [
-            {"attachment_id": "att_mock0001", "file_type": "idcard_front", "url": sys.argv[1], "md5": sys.argv[2], "ext": "jpg"}
+            {"attachment_id": "att_mock0001", "url": sys.argv[1], "md5": sys.argv[2], "ext": "jpg"}
         ]
     }
 }
