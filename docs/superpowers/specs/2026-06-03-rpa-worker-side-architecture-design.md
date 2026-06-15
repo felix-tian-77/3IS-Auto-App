@@ -112,7 +112,7 @@ V1.1 PRD 规定：
 | 语言 | Python（隐含） | Python ≥ 3.14 | Android 原生（Kotlin/Java） |
 | 核心框架 | FastAPI/Django | **Airtest + POCO** | 极简 HTTP/Socket 客户端 |
 | 持有 Flow 脚本 | ✅（OSS） | ✅（本地缓存） | ❌（不持有） |
-| 持有输入影像 | ❌（不中转字节流，V1.1 原则） | ❌（不缓存输入影像） | ✅（直连 OSS 下载到 `/sdcard/sandbox/`，事务后清理） |
+| 持有输入影像 | ❌（不中转字节流，V1.1 原则） | ❌（不缓存输入影像） | ✅（直连 OSS 下载到 `/sdcard/3is/<attachment_id>.<ext>`，事务后清理；R3 简化为平铺根目录） |
 | 持有 Airtest 截图 | ❌ | ✅（`~/.3is-auto/sandbox/{txn_id}/screenshots/`，仅供审计） | ❌ |
 | UI 自动化 | ❌ | ✅（Airtest 驱动） | ❌ |
 | 状态机管理 | ✅（强一致） | ❌ | ❌ |
@@ -130,6 +130,8 @@ V1.1 PRD 规定：
 
 ## 3. Device Agent 改造
 
+> **本章基线（实现状态,2026-06-15 同步）**：Device Agent 已实现为 **Android APK（`android/` 目录）**,运行 Foreground Service（`com.threeis.deviceagent.service.DeviceAgentService`,状态机含 `INITIALIZING` / `READY` / `DOWNLOADING` / `BUSY` / `OFFLINE` 等）。Device 直连 OSS 签名 URL,把附件落到 `/sdcard/3is/<attachment_id>.<ext>`,再通过同一 TCP Socket(`adb reverse tcp:8765 tcp:8765`)向 Worker 发 `DOWNLOAD_COMPLETE` 确认。`android/scripts/adb_install.sh` 完成构建 → 安装 → `MANAGE_EXTERNAL_STORAGE` 授权 → `adb reverse` → 拉起 MainActivity 的端到端引导。
+
 ### 3.1 移除的功能（V1.1 → 新架构）
 
 | V1.1 中 Device 做的事 | 新架构 |
@@ -138,7 +140,7 @@ V1.1 PRD 规定：
 | 接收 Step 指令并执行 | ❌ 移除（Worker 通过 ADB 直接执行） |
 | 截图、UI 自动化 | ❌ 移除 |
 | 上报 `step-result`（FR-MOB 执行结果） | ❌ 移除 |
-| Android 沙箱 + FileProvider（FR-MOB-004） | ⚠️ 简化为 `/sdcard/sandbox/{txn_id}/` 临时目录，Device 直连 OSS 下载后存储（**不通过 Worker 中转**） |
+| Android 沙箱 + FileProvider（FR-MOB-004） | ⚠️ 简化为 **`/sdcard/3is/<attachment_id>.<ext>`** 平铺沙箱,Device 直连 OSS 下载后存储（**不通过 Worker 中转**）。文件名以 `attachment_id` 为准,**不再**带事务级子目录与 `file_type` 前缀（R3 简化） |
 
 ### 3.2 保留的功能
 
@@ -149,7 +151,7 @@ V1.1 PRD 规定：
 | `POST /api/v1/devices/{id}/status` | HTTPS REST | 心跳：电量/存储/锁屏 |
 | `POST /api/v1/devices/{id}/download-ack` | HTTPS REST | **新增**：下载完成通知 |
 | `POST /api/v1/oss-urls/{id}/refresh` | HTTPS REST | OSS URL 续签 |
-| 直连 OSS 签名 URL 下载 | HTTPS 443 出站 | 影像文件下载到 `/sdcard/sandbox/{txn_id}/` |
+| 直连 OSS 签名 URL 下载 | HTTPS 443 出站 | 影像文件下载到 `/sdcard/3is/<attachment_id>.<ext>`(`attachment_id` 与 `ext` 取自 `DOWNLOAD_FILES.oss_urls[]` 元素,R3 简化) |
 
 ### 3.3 设备接口（PRD §6.2.3 重写）
 
@@ -190,8 +192,10 @@ Authorization: Bearer {device_token}
   "transaction_id": "TXN-20260603-00001",
   "files": [
     {
+      "attachment_id": "att_a1b2c3d4e5f6",
       "md5": "a1b2c3d4e5f6...",
-      "local_path": "/sdcard/sandbox/TXN-20260603-00001/idcard.jpg",
+      "local_path": "/sdcard/3is/att_a1b2c3d4e5f6.jpg",
+      "ext": "jpg",
       "size_bytes": 1024000
     }
   ],
@@ -207,16 +211,24 @@ Authorization: Bearer {device_token}
 ### 3.4 Socket 协议简化（PRD §6.3）
 
 ```json
-// Worker → Device (LAN Socket :8765)
+// Worker → Device (LAN Socket :8765,经 adb reverse 转发)
 {
   "cmd": "DOWNLOAD_FILES",
   "params": {
     "transaction_id": "TXN-20260603-00001",
     "oss_urls": [
       {
-        "file_type": "ID_CARD",
+        "attachment_id": "att_a1b2c3d4e5f6",
         "url": "https://oss.example.com/xxx?id=xxx&signature=xxx",
         "md5": "a1b2c3d4e5f6...",
+        "ext": "jpg",
+        "expires_at": "2026-06-03T10:05:00Z"
+      },
+      {
+        "attachment_id": "att_b2c3d4e5f6a7",
+        "url": "https://oss.example.com/yyy?id=yyy&signature=yyy",
+        "md5": "b2c3d4e5f6a7...",
+        "ext": "pdf",
         "expires_at": "2026-06-03T10:05:00Z"
       }
     ]
@@ -227,7 +239,15 @@ Authorization: Bearer {device_token}
 {
   "event": "DOWNLOAD_COMPLETE",
   "transaction_id": "TXN-20260603-00001",
-  "files": [...]
+  "files": [
+    {
+      "attachment_id": "att_a1b2c3d4e5f6",
+      "md5": "a1b2c3d4e5f6...",
+      "local_path": "/sdcard/3is/att_a1b2c3d4e5f6.jpg",
+      "ext": "jpg",
+      "size_bytes": 1024000
+    }
+  ]
 }
 
 {
@@ -239,6 +259,8 @@ Authorization: Bearer {device_token}
 **协议变化**：
 - ❌ 移除 `EXECUTE_STEP` 指令（Device 不再执行 Step）
 - ❌ 移除 `STEP_RESULT` 事件（Device 不再上报 Step 结果）
+- ✅ `oss_urls[]` 元素新增 **`attachment_id`（string,Backend 下发的附件唯一 ID）** 与 **`ext`（string,取 `jpg` / `png` / `pdf` 之一）**;`DOWNLOAD_COMPLETE.files[]` 元素同样回带 `attachment_id` 与 `ext` 供 Worker 校验与日志关联
+- ✅ 移除 `oss_urls[].file_type` 字段——文件类型信息已通过 `transaction.attachments_meta` 在事务级别携带,不需要在下载协议里重复（R3 简化）
 - ✅ 仅保留 `DOWNLOAD_FILES` / `DOWNLOAD_COMPLETE` / `OSS_URL_EXPIRED`
 
 ### 3.5 设备实体变更（PRD §5.2）
@@ -249,7 +271,7 @@ Authorization: Bearer {device_token}
 | sn | String(64) UK | 设备 SN/UDID | 不变 |
 | worker_id | String FK | 挂载的 Worker | 不变 |
 | adb_serial | String | ADB 序列号 | **新增**（Worker 通过此连接 ADB） |
-| sandbox_path | String | 临时沙箱路径，默认 `/sdcard/sandbox/{txn_id}/` | **新增** |
+| sandbox_path | String | 临时沙箱路径，默认 `/sdcard/3is/`（平铺目录,文件名规则 `<attachment_id>.<ext>`;R3 简化后**不再**有事务级子目录） | **新增** |
 | model | String | 设备型号 | 不变 |
 | android_version | String | Android 版本 | 不变 |
 | battery_level | Int | 电量（0-100） | 不变 |
@@ -265,9 +287,10 @@ Authorization: Bearer {device_token}
 |------|------|
 | **白名单 IP** | Socket :8765 仅接受站点固定 IP 段（不变） |
 | **OSS 签名 URL 临时性** | TTL ≤ 5min，Bucket Policy 限制（不变） |
-| **设备侧文件清理** | 事务终态后由 Worker 通过 ADB 触发 `adb shell rm -rf /sdcard/sandbox/{txn_id}` 清理 Device 端输入影像 |
+| **设备侧文件清理** | 事务终态后由 Worker 通过 ADB 触发 `adb shell rm -rf /sdcard/3is/` 清理 Device 端输入影像（R3 简化为平铺目录,直接清根目录即可） |
 | **Worker 端截图清理** | 事务完成后清理 `~/.3is-auto/sandbox/{txn_id}/screenshots/`（Worker 本地 Airtest 截图，不含输入影像） |
 | **设备端 App 包大小** | 从 ~50MB 降至 ~5MB（无 Airtest runtime） |
+| **Device 端沙箱位置** | `/sdcard/3is/` 是**显式**的设备侧共享沙箱,跨 APP 可读是**为适配目标保险 APP 直读影像**而做出的**有意例外**——本工具的内部约定,**不是**通用隔离策略。其他模块应继续走 APP 私有目录（`context.filesDir`）做隔离;新增子模块若也想使用 `/sdcard/3is/` 模式需单独评审 |
 
 ---
 
@@ -296,9 +319,9 @@ Authorization: Bearer {device_token}
 4.3  POST /api/v1/transactions/{id}/oss-urls → 拿到 signed_urls[]
 4.4  启动 Airtest Runtime: connect_device("android:///{adb_serial}")
 4.5  解析 Flow 定义 (从 ~/.3is-auto/flows/{flow_id}/{version}/)
-4.6  ── Socket:8765 ──► Device: DOWNLOAD_FILES {oss_urls}
-4.7  Device 直连 OSS 下载到 /sdcard/sandbox/{txn_id}/
-4.8  Device 完成 → POST /devices/{id}/download-ack
+4.6  ── Socket:8765 ──► Device: DOWNLOAD_FILES {oss_urls: [{attachment_id, url, md5, ext, ...}]}
+4.7  Device 直连 OSS 下载到 /sdcard/3is/<attachment_id>.<ext>（文件名取自协议,见 §3.4）
+4.8  Device 完成 → POST /devices/{id}/download-ack（含 attachment_id 列表与 MD5）
 4.9  Worker 收到下载完成 → 事务进入 RUNNING
 4.10 ── 可选 ── Worker 校验 Device 沙箱（基于 download-ack 上报的 MD5 比对）
 4.11 按 Step 顺序执行:
@@ -314,7 +337,7 @@ Authorization: Bearer {device_token}
 4.15 全部 Step 完成 → POST /tasks/{id}/result
 4.16 清理:
        - Worker: 清理 ~/.3is-auto/sandbox/{txn_id}/screenshots/（Airtest 截图）
-       - Device: adb shell rm -rf /sdcard/sandbox/{txn_id}（输入影像）
+       - Device: adb shell rm -rf /sdcard/3is/（输入影像,平铺目录直接清根）
        - disconnect_device()
 
 阶段 5：结果回传（与 V1.1 相同，省略）
@@ -352,12 +375,16 @@ Authorization: Bearer {device_token}
 | 位置 | 路径 | 用途 | 数据流向 |
 |------|------|------|----------|
 | Worker 本地 | `~/.3is-auto/sandbox/{txn_id}/screenshots/` | Airtest 截图取证 | **Worker → 本地**（adb pull 或本地 snapshot） |
-| Device 临时 | `/sdcard/sandbox/{txn_id}/` | 保险 APP 读取输入影像 | **OSS → Device**（Device 直连下载，**不经 Worker**） |
+| Device 临时 | `/sdcard/3is/<attachment_id>.<ext>` | 保险 APP 读取输入影像 | **OSS → Device**（Device 直连下载，**不经 Worker**） |
 
 **设计原则**：
-- **输入影像**：Device Agent 直连 OSS 签名 URL 下载到 Device 沙箱，**Worker 不缓存、不中转**（延续 V1.1 原则）
+- **输入影像**：Device Agent 直连 OSS 签名 URL 下载到 Device 沙箱，**Worker 不缓存、不中转**（延续 V1.1 原则）。R3 简化后沙箱改为平铺的 `/sdcard/3is/` 根目录,文件名 `<attachment_id>.<ext>`——去除了事务级子目录与 `file_type` 前缀,降低目录与协议复杂度
 - **Airtest 截图**：Worker 端 Airtest runtime 通过 `snapshot()` / `adb pull` 存到本地沙箱，仅供审计与失败回溯
-- **清理触发**：事务终态后由 Worker 统一触发两侧清理（Worker 本地 rm + adb shell rm）
+- **清理触发**：事务终态后由 Worker 统一触发两侧清理（Worker 本地 rm + adb shell `rm -rf /sdcard/3is/`）
+
+**隔离边界（重要,R3 例外）**：
+
+`/sdcard/3is/` 位于 Android 外部存储共享区,**默认对其它 APP 可见**——这是**本工具明确选择的例外**(目标保险 APP 需要直接读取该目录下的影像文件,继续走 FileProvider 中转会引入额外的 content URI 解析开销与权限握手),**不是**通用隔离策略。新增子模块若想使用同样的共享目录模式,需要单独评审;默认应继续走 APP 私有目录(`context.filesDir`)。Worker ↔ Device 的网络边界由白名单 IP + `adb reverse` 共同保证（见 §3.6）。
 
 ### 4.6 Step → Airtest API 映射
 

@@ -472,57 +472,69 @@ Device 是简化的 Android Agent，负责:
 
 ### 5.1 APK 安装
 
-Device Agent APK 文件位于项目根目录或由开发团队提供。
+Device Agent 由 `android/` 目录的 Android 工程构建产出。APK 路径:
+
+```
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+**方式 1: 一键脚本(推荐)**
+
+```bash
+bash android/scripts/adb_install.sh
+```
+
+脚本会自动完成四件事:① `./gradlew :app:assembleDebug` 构建 APK;② `adb install -r app-debug.apk` 安装/覆盖安装;③ `adb shell appops set --uid com.threeis.deviceagent MANAGE_EXTERNAL_STORAGE allow` 授予全盘存储权限;④ `adb reverse tcp:8765 tcp:8765` 把设备的 localhost:8765 反向到桌面 Worker,并 `am start` 拉起 `MainActivity`。
+
+**方式 2: 手工分步执行**
 
 ```bash
 # 连接 Android 设备
 adb devices
 
-# 安装 APK
-adb install device-app.apk
+# 构建并安装 APK
+cd android
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 
-# 或推送 APK 到设备后手动安装
-adb push device-app.apk /sdcard/
+# 授予存储权限(Android 11+ 必走 AppOps 通道)
+adb shell appops set --uid com.threeis.deviceagent MANAGE_EXTERNAL_STORAGE allow
+
+# 反向 Worker 端口(否则设备侧的 localhost:8765 无法触达 Worker)
+adb reverse tcp:8765 tcp:8765
+
+# 拉起主界面
+adb shell am start -n com.threeis.deviceagent/.MainActivity
 ```
-
-> **Python 端辅助脚本(可选):** 若 `device/` 目录内的 Python 工具脚本(如 `downloader.py`、`socket_client.py`)需在桌面端调试运行,使用 uv 同步依赖:
-> ```bash
-> cd device
-> uv sync
-> uv run python main.py
-> ```
 
 ### 5.2 配置 Device
 
-仓库提供 `scripts/.env.example` 模板,可基于此复制到 `device/.env`:
+Device 端不再使用 `.env` / Python 环境变量。所有 Device 端配置(Worker 主机/端口、Backend URL、设备 ID)通过 **`MainActivity` 界面** 编辑并点击「保存」,写入 `SharedPreferences`(`3is_device_agent`);默认值来自 `BuildConfig`(`android/app/build.gradle.kts` 的 `buildConfigField`),例如:
 
-```env
-# Worker 连接 (局域网)
-WORKER_HOST=192.168.1.100
-WORKER_PORT=8765
+| 字段 | BuildConfig 默认值 | 含义 |
+|------|------------------|------|
+| `WORKER_HOST` | `192.168.1.100` | Worker 主机 IP |
+| `WORKER_PORT` | `8765` | Worker Socket 端口 |
+| `BACKEND_URL` | `http://192.168.1.100:8000` | Backend REST 地址 |
+| `DEVICE_ID` | 启动时随机生成(`device-xxxx-NNNN`) | 设备唯一标识 |
 
-# Backend 连接
-BACKEND_URL=http://localhost:8000
-
-# 设备标识
-DEVICE_ID=device-001
-```
+如需修改默认值(例如指向生产环境),编辑 `android/app/build.gradle.kts` 的 `defaultConfig.buildConfigField` 后重新 `./gradlew :app:assembleDebug`。
 
 ### 5.3 启动 Device Agent
 
-**方式 1: 通过 ADB 启动**
+**方式 1: 通过 ADB 启动(由 `adb_install.sh` 自动完成)**
 ```bash
-adb shell am start -n com.example.deviceagent/.MainActivity
+adb shell am start -n com.threeis.deviceagent/.MainActivity
 ```
 
 **方式 2: 通过设备屏幕点击启动**
-- 找到 Device Agent 图标
-- 点击启动应用
+- 找到「3IS Device Agent」图标
+- 点击启动应用,首次启动会提示授予 `MANAGE_EXTERNAL_STORAGE`
 
 **方式 3: 设备端命令行**
 ```bash
 # 在设备上执行
-am start -n com.example.deviceagent/.MainActivity
+am start -n com.threeis.deviceagent/.MainActivity
 ```
 
 ### 5.4 验证 Device 在线
@@ -537,29 +549,64 @@ curl http://localhost:8000/api/v1/workers
 
 ### 5.5 Device Socket 连接说明
 
-Device 通过局域网 Socket 连接到 Worker:
+Device 通过 TCP Socket 连接到 Worker,链路为 `adb reverse` 反向通道:
 
 ```
-Device (Android)  ──── Socket :8765 ────  Worker (Desktop)
+Device (Android)  ──adb reverse──►  Worker (Desktop) :8765
+       SocketClient 连 127.0.0.1:8765 即等于连 Worker
 ```
 
 **前提条件:**
-- Device 与 Worker 在同一局域网
-- Worker 已启动并监听端口
-- `WORKER_HOST` 配置为 Worker 的 IP 地址
+- Device 与 Worker 通过 USB 物理连接(adb 已建立)
+- `adb reverse tcp:8765 tcp:8765` 已执行(由 `android/scripts/adb_install.sh` 自动维护,USB 重连后需重做)
+- Worker 已启动并监听 8765 端口(见 §4.5)
+- Device 端 `WORKER_HOST` (默认 `192.168.1.100`)与 `WORKER_PORT` (默认 `8765`) 已在 `MainActivity` 配置好;**实际 Socket 连的是设备自身的 `127.0.0.1:8765`**,`WORKER_HOST` 仅用于 Worker 侧的握手与日志标注
 
-### 5.6 Device 目录结构
+### 5.6 Device 目录结构与设备端沙箱
+
+**Android 工程目录(`android/`):**
 
 ```
-device/
-├── __init__.py
-├── main.py              # Device 入口程序
-├── downloader.py        # 文件下载模块
-├── socket_client.py     # Socket 客户端
-├── pyproject.toml       # uv 项目定义
-├── uv.lock              # uv 锁文件
-└── .env                 # 环境变量 (本地创建)
+android/
+├── app/
+│   ├── build.gradle.kts        # 含 BuildConfig 默认值 (WORKER_HOST/PORT/BACKEND_URL)
+│   ├── proguard-rules.pro
+│   └── src/
+│       └── main/
+│           ├── AndroidManifest.xml   # 申请 INTERNET / FOREGROUND_SERVICE / MANAGE_EXTERNAL_STORAGE
+│           ├── java/com/threeis/deviceagent/
+│           │   ├── MainActivity.kt           # 配置 UI (Worker host/port/Backend URL/Device ID)
+│           │   ├── DeviceAgentApplication.kt
+│           │   ├── data/
+│           │   │   ├── Config.kt             # SharedPreferences + BuildConfig 读取
+│           │   │   └── Models.kt             # 协议模型 (含 attachment_id / ext)
+│           │   ├── download/
+│           │   │   ├── SandboxManager.kt     # 沙箱根目录 /sdcard/3is/
+│           │   │   └── Downloader.kt         # 直连 OSS 签名 URL
+│           │   ├── net/
+│           │   │   ├── SocketClient.kt       # 与 Worker 的 TCP 8765 通信
+│           │   │   └── BackendApi.kt         # ready / status / download-ack
+│           │   └── service/
+│           │       └── DeviceAgentService.kt # Foreground Service,状态机 (INITIALIZING/READY/...)
+│           └── res/                          # UI 布局 / strings / themes
+├── build.gradle.kts
+├── settings.gradle.kts
+├── gradle.properties
+└── scripts/
+    ├── adb_install.sh     # 一键:build + install + MANAGE_EXTERNAL_STORAGE + adb reverse + 启动
+    └── mock_worker.py     # 桌面端 Python mock,用于在无 Worker 机器上联调 Device Agent
 ```
+
+**设备端沙箱(Android 设备 `/sdcard/3is/`):**
+
+- 根目录:`/sdcard/3is/`(Device 内部约定,**不再**使用事务级 `/sdcard/sandbox/{txn_id}/`)
+- 文件命名规则:`<attachment_id>.<ext>`,例如 `att_a1b2c3d4.jpg` / `att_e5f6g7h8.pdf`
+- `attachment_id` 由 Backend 在 `POST /api/v1/transactions` 响应中下发,通过 `DOWNLOAD_FILES` 指令传给 Device
+- `ext` 取 `jpg|png|pdf` 三者之一(在 `download_urls[]` 元素中显式携带,见 §7.6 协议)
+- 写入路径:由 `SandboxManager.pathFor(attachmentId, ext)` 拼装,先写 `<attachment_id>.<ext>.part` 再原子 rename
+- 事务终态后由 Worker 触发 `adb shell rm -rf /sdcard/3is/` 清理(`download-ack` 上报完成后)
+
+> **关于跨 APP 可读:** `/sdcard/3is/` 位于外部存储共享区,默认对其它 APP 可见,这是**本工具明确选择的例外**(目标保险 APP 需直接读取该目录下的影像文件),**不是**通用沙箱策略。其他模块应继续使用 APP 私有目录(`context.filesDir`)做隔离。
 
 ---
 
@@ -593,14 +640,18 @@ device/
 | `WORKER_PORT` | `8765` | 否 | Socket 监听端口 |
 | `HEARTBEAT_INTERVAL` | `30` | 否 | 心跳间隔 (秒) |
 
-### 6.3 Device 环境变量详解
+### 6.3 Device 端配置(取代原 Python `DEVICE_*` 环境变量)
 
-| 变量名 | 默认值 | 必填 | 说明 |
-|--------|--------|------|------|
-| `WORKER_HOST` | `192.168.1.100` | 是 | Worker IP 地址 |
-| `WORKER_PORT` | `8765` | 是 | Worker Socket 端口 |
-| `BACKEND_URL` | `http://localhost:8000` | 是 | Backend 服务地址 |
-| `DEVICE_ID` | `device-001` | 否 | 设备标识 (默认自动生成) |
+Device 端不再使用 `WORKER_HOST` / `WORKER_PORT` / `BACKEND_URL` / `DEVICE_ID` 等 Python 环境变量;改由 Android `MainActivity` 写入 `SharedPreferences`,默认值来自 `BuildConfig`。
+
+| 字段 | BuildConfig 默认值 | 含义 | 运行时修改方式 |
+|------|------------------|------|---------------|
+| `WORKER_HOST` | `192.168.1.100` | Worker 主机 IP | `MainActivity` 编辑 + 保存;或改 `app/build.gradle.kts` 后重新构建 |
+| `WORKER_PORT` | `8765` | Worker Socket 端口 | 同上 |
+| `BACKEND_URL` | `http://192.168.1.100:8000` | Backend REST 地址 | 同上 |
+| `DEVICE_ID` | 启动时随机生成(`device-xxxx-NNNN`) | 设备唯一标识 | `MainActivity` 可手动覆写 |
+
+> 历史兼容:如发现遗留的 `device/.env` 文件(`WORKER_HOST` / `WORKER_PORT` / `BACKEND_URL` / `DEVICE_ID`)可安全删除,新版 Android Agent 不再读取。
 
 ### 6.4 生产环境安全配置
 
@@ -624,6 +675,17 @@ Device 通过 USB ADB 反向网络访问 Backend:
 ```
 Device → USB → Worker → Backend
 ```
+
+**Device → Worker 链路(关键,常被忽略)**
+
+Device Agent APP 通过 `adb reverse tcp:8765 tcp:8765` 把设备自身的 `localhost:8765` 反向到桌面的 Worker:
+
+```
+Device (Android)  ──adb reverse──►  Worker (Desktop) :8765
+       SocketClient 连 127.0.0.1:8765 即等于连 Worker
+```
+
+> **`adb reverse` 必须每次设备重连 USB 后重做一次**。`android/scripts/adb_install.sh` 会在 install 时自动执行;若手动 install,务必自行补 `adb reverse tcp:8765 tcp:8765`。可用 `adb reverse --list` 验证当前反向映射。
 
 **站点 VPN (备选)**
 
@@ -685,7 +747,13 @@ uv run python main.py
 
 ### 7.5 Step 4: 启动 Device
 
-在 Android 设备上启动 Device Agent 应用
+Device Agent 在第 5.1 节执行 `bash android/scripts/adb_install.sh` 时已经被 `am start` 拉起。若需手动重启:
+
+```bash
+adb shell am start -n com.threeis.deviceagent/.MainActivity
+```
+
+启动后 `MainActivity` 会显示 4 个配置输入框(Worker host/port/Backend URL/Device ID),按需修改后点击「保存」即可。最后点击「启动」按钮拉起 Foreground Service(通知栏出现 "3IS Device Agent" 常驻通知即表示已就绪)。
 
 ### 7.6 Step 5: 提交测试事务
 
@@ -746,6 +814,7 @@ curl -X POST http://localhost:8000/api/v1/transactions/<transaction_id>/download
 | `failed to solve: python:3.x-slim` | Docker 镜像源 403 | 见 README 关于镜像源的说明,或换 `docker.m.daocloud.io` 镜像 |
 | `uv: command not found` | uv 未安装 | 见 §1.3,执行 `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `uv sync` 解析失败 | `uv.lock` 与 `pyproject.toml` 不一致 | 重新生成锁文件:`uv lock` 后再 `uv sync` |
+| Device Service 通知卡在 `INITIALIZING`(设备无 `READY` 上报) | 设备的 localhost:8765 反向不通 / Worker 未监听 | ① `adb reverse --list` 确认有 `tcp:8765 tcp:8765`;无则 `adb reverse tcp:8765 tcp:8765` 补做。② 确认 Worker 进程在跑且监听 8765(在 Worker 主机 `ss -tlnp \| grep 8765` 验证)。③ 检查 `MANAGE_EXTERNAL_STORAGE` 是否已授权:`adb shell appops get --uid com.threeis.deviceagent MANAGE_EXTERNAL_STORAGE` |
 
 ### 8.2 网络检查清单
 
@@ -853,19 +922,29 @@ docker logs scripts-backend-1
 │   ├── pyproject.toml       # uv 项目定义
 │   └── uv.lock              # uv 锁文件
 │
-├── device/
-│   ├── __init__.py
-│   ├── main.py              # Device 入口 (相对导入)
-│   ├── downloader.py        # 文件下载
-│   ├── socket_client.py     # Socket 客户端
-│   ├── pyproject.toml       # uv 项目定义
-│   └── uv.lock              # uv 锁文件
+├── android/                 # Android Device Agent 工程
+│   ├── app/
+│   │   ├── build.gradle.kts        # BuildConfig 默认值
+│   │   └── src/main/
+│   │       ├── AndroidManifest.xml # 含 MANAGE_EXTERNAL_STORAGE 申请
+│   │       ├── java/com/threeis/deviceagent/
+│   │       │   ├── MainActivity.kt
+│   │       │   ├── data/         # Config (SharedPreferences) / Models
+│   │       │   ├── download/     # SandboxManager / Downloader
+│   │       │   ├── net/          # SocketClient / BackendApi
+│   │       │   └── service/      # DeviceAgentService (Foreground)
+│   │       └── res/
+│   ├── build.gradle.kts
+│   ├── settings.gradle.kts
+│   └── scripts/
+│       ├── adb_install.sh        # build + install + 授权 + adb reverse
+│       └── mock_worker.py        # 桌面 Python mock Worker,联调用
 │
 ├── scripts/
 │   ├── docker-compose.yaml  # Docker 编排
 │   ├── init_db.sql          # 数据库建表 (entrypoint 自动运行)
 │   ├── test_integration.py  # 集成测试
-│   └── .env.example         # 环境变量模板 (供 backend/worker/device 复制)
+│   └── .env.example         # 环境变量模板 (供 backend/worker 复制;Device 端不再使用 .env)
 │
 ├── tests/
 │   ├── conftest.py
@@ -934,6 +1013,17 @@ uv run --project backend python scripts/test_integration.py
 ---
 
 ## Changelog
+
+**V1.3 (2026-06-15)**
+- §5.1 APK 安装改用 `android/scripts/adb_install.sh` 一键脚本(自动 build + install + MANAGE_EXTERNAL_STORAGE 授权 + `adb reverse` + 拉起 MainActivity);包名从占位 `com.example.deviceagent` 更新为真实 `com.threeis.deviceagent`
+- §5.2 配置 Device:删除 Python `device/.env` 工作流,改为 MainActivity 写入 SharedPreferences,默认值取自 BuildConfig
+- §5.3 启动 Device Agent:更新启动命令中的包名
+- §5.6 Device 目录结构:替换 Python `device/` 树为 Android `android/` 工程树;新增设备端沙箱 `/sdcard/3is/<attachment_id>.<ext>` 命名规则说明
+- §6.3 Device 端配置:表格替换为 SharedPreferences + BuildConfig 字段
+- §6.5 网络拓扑配置:新增「Device → Worker 链路」小节,说明 `adb reverse tcp:8765 tcp:8765` 由 `adb_install.sh` 自动维护
+- §7.5 Step 4:补充 MainActivity 4 个配置输入框与 Foreground Service 通知的就绪判据
+- §8.1 故障排查表:新增「Device Service 卡在 `INITIALIZING`」条目,关联 `adb reverse` 校验命令
+- §9 文件结构:删除 Python `device/` 子树,新增 `android/` 子树(含 `scripts/adb_install.sh` 与 `mock_worker.py`)
 
 **V1.2 (2026-06-11)**
 - Python 依赖管理全面迁移至 [uv](https://docs.astral.sh/uv/) 框架(基于 `pyproject.toml` + `uv.lock`)
