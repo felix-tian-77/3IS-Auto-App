@@ -26,6 +26,7 @@ class DeviceDownloadAckRequest(BaseModel):
     files: List[DownloadAckFile]
     all_success: bool
     sandbox_clear_failed: bool = False
+    completed_at: datetime
 
 
 class DeviceDownloadAckResponse(BaseModel):
