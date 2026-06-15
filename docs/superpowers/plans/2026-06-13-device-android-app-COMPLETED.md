@@ -25,16 +25,18 @@ Plan: `docs/superpowers/plans/2026-06-13-device-android-app.md`
 
 For the spec's 12 manual-acceptance scenarios, see `docs/superpowers/specs/2026-06-12-device-android-app-design.md` §5.1. The mock worker (`android/scripts/mock_worker.py`) supports scenarios 4, 5, 6, 11; a real device is required for the rest.
 
-## Commits (24 atomic commits)
+## Commit count
 
-Run `git log --oneline 16f863b..HEAD` to see the full list. Highlights:
+Run `git log --oneline 16f863b..HEAD | wc -l` for the live count. As of this doc: **38 commits**.
 
-- Plan: 1 commit
-- Backend: 9 commits (schemas, sandbox default, 2 endpoints, 4 fix commits for the T4 spec review)
-- Worker: 5 commits (DeviceDispatcher + 2 fixes + main-loop wiring + tests)
-- Android: 12 commits (Gradle skeleton, manifest, 8 source files in 3 commits, 2 carryover fixes, mock+adb scripts)
-- Docs: 2 commits (user-manu + worker spec sync)
-- Cleanup: 1 commit (device/ deletion)
+Approximate breakdown (verified by `git log --oneline`):
+
+- Plan amendments: 3 (T2 amend, T2 smoke-test fix, T3+T4 test-path fix)
+- Backend: 11 (Pydantic schemas, sandbox default, ready endpoint, download-ack endpoint + revert + refactor, aiosqlite pin, 3 tests, style fix)
+- Worker: 7 (DeviceDispatcher + 2 fixes, main-loop wiring, 2 tests, pytest build dep)
+- Android: 14 (Gradle skeleton, manifest+resources, 11 Kotlin source/fix commits, mock+adb scripts)
+- Docs: 2 (T17 user-manu + worker-spec sync, T18 closing notes)
+- Cleanup: 1 (device/ deletion)
 
 ## Known follow-ups (deferred from MVP)
 
@@ -47,3 +49,4 @@ Run `git log --oneline 16f863b..HEAD` to see the full list. Highlights:
 - **Pre-existing `pywin32` Linux sync issue** — `worker/pyproject.toml` declares `airtest` which transitively requires `pywinauto` (Windows only). `uv sync` fails on Linux. Unrelated to this plan.
 - **`Logger.error("Task poll failed: %e", e)`** — pre-existing formatting bug at `worker/main.py:86` (uses `%e` instead of `%s` or `logger.exception`). Carried through; not addressed.
 - **Other hardcoded toasts in MainActivity** — `"Already granted"` and `"Pre-R devices: permission granted at install time"` are not in strings.xml. Lint will warn; MVP-acceptable.
+- **Pre-existing `scripts/init_db.sql:27` corruption** — a shell command (`uvicorn backend.main:app...`) is concatenated into the middle of a SQL DEFAULT clause. The file is not actually used by the app (which uses `Base.metadata.create_all`), so the bug is dormant, but the file should be cleaned up.
