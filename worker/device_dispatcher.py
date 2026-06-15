@@ -38,10 +38,12 @@ def build_instruction(transaction_id: str, attachments: list) -> dict:
     ]
     return {
         "cmd": "DOWNLOAD_FILES",
-        "params": {
-            "transaction_id": transaction_id,
-            "download_urls": [asdict(u) for u in urls],
-        },
+        "params": asdict(
+            DownloadInstruction(
+                transaction_id=transaction_id,
+                download_urls=urls,
+            )
+        ),
     }
 
 
@@ -62,7 +64,7 @@ class DeviceDispatcher:
         payload = (json.dumps(instruction) + "\n").encode("utf-8")
         with socket.create_connection((self.host, self.port), timeout=10) as s:
             s.sendall(payload)
-            s.settimeout(self.ack_timeout_sec)
+            s.settimeout(1.0)
             buf = b""
             deadline = time.time() + self.ack_timeout_sec
             while time.time() < deadline:
