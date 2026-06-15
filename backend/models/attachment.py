@@ -31,6 +31,7 @@ class Attachment(Base):
     file_size = Column(BigInteger, default=0)
     storage_backend = Column(String(16), default=StorageBackendType.LOCAL.value)
     storage_path = Column(String(512), nullable=True)
+    local_path = Column(String(512), nullable=True)
     is_orphan = Column(Boolean, default=False)
     md5 = Column(String(32), nullable=True)
     sha256 = Column(String(64), nullable=True, index=True)
