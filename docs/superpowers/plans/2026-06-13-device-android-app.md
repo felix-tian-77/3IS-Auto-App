@@ -214,14 +214,14 @@ grep -rn "/sdcard/sandbox" backend/ worker/ --include="*.py" --include="*.md" | 
 
 Expected: the only match is the one line you just changed (or any historical reference in `docs/` that doesn't affect code behavior). If other code references the old path, STOP and report BLOCKED.
 
-- [ ] **Step 3: Verify the model still imports cleanly**
+- [ ] **Step 3: Verify the model still imports cleanly and the default is correct**
 
 ```bash
 cd backend
-.venv/bin/python -c "from backend.models.device import Device; print(Device().sandbox_path)"
+.venv/bin/python -c "from backend.models.device import Device; print(Device.__table__.columns.sandbox_path.default)"
 ```
 
-Expected: prints `/sdcard/3is/`.
+Expected: prints `ScalarElementColumnDefault('/sdcard/3is/')` (or similar representation of the new default). Note: `Device().sandbox_path` will print `None` at construction time because `Column(default=...)` is a SQLAlchemy flush-time default, not a Python `__init__` default. The default fires on INSERT, which is when T3's endpoint creates a row.
 
 - [ ] **Step 4: Commit**
 
