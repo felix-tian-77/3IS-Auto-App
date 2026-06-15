@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity() {
                 deviceId = etId.text.toString().ifBlank { null },
             )
             restartService()
-            Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.saved), Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.btnStopService).setOnClickListener {
             stopService(Intent(this, DeviceAgentService::class.java))

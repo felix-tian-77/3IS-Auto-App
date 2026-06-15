@@ -27,6 +27,7 @@ class Config private constructor(private val prefs: SharedPreferences) {
         if (backendUrl != null) ed.putString(KEY_BACKEND_URL, backendUrl)
         if (deviceId != null) ed.putString(KEY_DEVICE_ID, deviceId)
         ed.apply()
+        instance = null
     }
 
     private fun defaultDeviceId(): String =

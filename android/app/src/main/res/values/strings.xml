@@ -11,4 +11,11 @@
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="save">Save</string>
+    <string name="grant_storage">Grant storage permission</string>
+    <string name="configuration">Configuration</string>
+    <string name="hint_worker_host">Worker host</string>
+    <string name="hint_worker_port">Worker port</string>
+    <string name="hint_backend_url">Backend URL</string>
+    <string name="hint_device_id">Device ID</string>
+    <string name="saved">Saved</string>
 </resources>
