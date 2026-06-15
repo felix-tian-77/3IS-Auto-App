@@ -24,6 +24,7 @@ dependencies = [
 dev = [
     "pytest==9.0.3",
     "pytest-asyncio==1.4.0",
+    "aiosqlite>=0.22",
 ]
 
 [tool.uv]
