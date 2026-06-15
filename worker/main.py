@@ -6,6 +6,7 @@ import requests
 import logging
 from device_controller import DeviceController
 from airtest_executor import AirtestExecutor
+from device_dispatcher import DeviceDispatcher, build_instruction
 from config import config
 
 logging.basicConfig(level=logging.INFO)
@@ -70,7 +71,7 @@ class Worker:
             return False
 
     def poll_tasks(self):
-        """Poll for tasks from backend"""
+        """Poll for tasks from backend; returns dict with .task and .attachments, or None."""
         url = f"{config.BACKEND_URL}/api/v1/tasks/poll"
         try:
             resp = requests.get(
@@ -80,37 +81,49 @@ class Worker:
             )
             if resp.status_code == 200:
                 data = resp.json()
-                return data.get("task") if isinstance(data, dict) else None
+                return data if isinstance(data, dict) else None
         except Exception as e:
-            logger.error(f"Task poll failed: {e}")
+            logger.error("Task poll failed: %e", e)
         return None
+
+    def dispatch_to_device(self, task: dict) -> bool:
+        if not task.get("task"):
+            return False
+        txn = task["task"]
+        attachments = task.get("attachments", [])
+        instruction = build_instruction(txn["transaction_id"], attachments)
+        dispatcher = DeviceDispatcher(
+            config.DEVICE_HOST,
+            config.DEVICE_PORT,
+            ack_timeout_sec=config.DISPATCH_TIMEOUT,
+        )
+        ack = dispatcher.send_and_await_ack(instruction)
+        if ack is None:
+            logger.error("No ack from device for txn %s", txn["transaction_id"])
+            return False
+        logger.info("Device ack: %s", ack)
+        # TODO (post-MVP): POST ack back to Backend via workers/ack or similar
+        return True
 
     def run(self):
         """Main worker loop"""
         logger.info(f"Worker starting with ADB serial: {self.adb_serial}")
 
-        # Register
         if not self.register():
             logger.error("Worker registration failed, exiting")
             sys.exit(1)
-
-        # Connect to device
         if not self.device_controller.connect():
             logger.error("Device connection failed, exiting")
             sys.exit(1)
-
-        # Connect Airtest
         self.airtest_executor = AirtestExecutor(self.adb_serial)
         self.airtest_executor.connect()
-
         logger.info("Worker started successfully")
 
-        # Main loop
         while True:
             self.send_heartbeat()
             task = self.poll_tasks()
             if task:
-                logger.info(f"Received task: {task}")
+                self.dispatch_to_device(task)
             time.sleep(config.HEARTBEAT_INTERVAL)
 
 
