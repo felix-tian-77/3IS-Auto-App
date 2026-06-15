@@ -68,7 +68,10 @@ class DeviceDispatcher:
             buf = b""
             deadline = time.time() + self.ack_timeout_sec
             while time.time() < deadline:
-                chunk = s.recv(4096)
+                try:
+                    chunk = s.recv(4096)
+                except socket.timeout:
+                    continue
                 if not chunk:
                     break
                 buf += chunk
@@ -76,7 +79,7 @@ class DeviceDispatcher:
                     line, _, _ = buf.partition(b"\n")
                     try:
                         return json.loads(line.decode("utf-8"))
-                    except json.JSONDecodeError as e:
+                    except json.JSONDecodeError:
                         logger.error("Device sent non-JSON ack: %r", line)
                         return None
         logger.warning("Device closed before ack")
