@@ -241,42 +241,50 @@ git commit -m "feat(backend): default device sandbox_path to /sdcard/3is/"
 
 - [ ] **Step 1: Write the failing test first**
 
-Create `backend/tests/__init__.py` (empty) and `backend/tests/api/__init__.py` and `backend/tests/api/v1/__init__.py` (all empty). Then `backend/tests/api/v1/test_devices.py`:
+> **Project test convention:** This repo keeps tests in `tests/backend/`, not `backend/tests/`. Existing sibling files: `tests/backend/test_workers.py`, `tests/backend/test_workers_list.py`, etc. Use the same path. The repository root `conftest.py` provides `db_engine`, `db_session`, and `seed_devices` fixtures; tests use `app.dependency_overrides[get_db]` to point FastAPI at the in-memory sqlite engine. See `tests/backend/test_workers_list.py` for the exact pattern.
+
+Create `tests/backend/test_devices.py`:
 
 ```python
 import pytest
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
 from backend.main import app
+from backend.db.database import get_db
 
 
 @pytest.mark.asyncio
-async def test_device_ready_updates_status_and_last_seen_at():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.post(
-            "/api/v1/devices/device-001/ready",
-            json={"status": "READY"},
-        )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["device_id"] == "device-001"
-    assert body["status"] == "READY"
-    assert "last_seen_at" in body
+async def test_device_ready_updates_status_and_last_seen_at(db_engine):
+    SessionLocal = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override_get_db():
+        async with SessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(
+                "/api/v1/devices/device-001/ready",
+                json={"status": "READY"},
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["device_id"] == "device-001"
+        assert body["status"] == "READY"
+        assert "last_seen_at" in body
+    finally:
+        app.dependency_overrides.clear()
 ```
 
-Add `httpx` and `pytest-asyncio` to `backend/pyproject.toml` if not already present:
-
-```toml
-[project.optional-dependencies]
-test = ["httpx>=0.27", "pytest-asyncio>=0.23"]
-```
-
-Then `uv pip install -e ".[test]"` (or whatever the project uses; check `uv.lock` for prior pattern).
+`httpx==0.28.1` and `pytest-asyncio==1.4.0` are already in `pyproject.toml` — no dependency changes needed.
 
 - [ ] **Step 2: Run the test to confirm it fails**
 
 ```bash
-cd backend
-pytest tests/api/v1/test_devices.py::test_device_ready_updates_status_and_last_seen_at -v
+cd /data/workspaces/3IS-Auto-App
+pytest tests/backend/test_devices.py::test_device_ready_updates_status_and_last_seen_at -v
 ```
 
 Expected: `404 Not Found` (route does not exist yet).
@@ -386,8 +394,8 @@ api_router.include_router(devices.router, prefix="", tags=["devices"])
 - [ ] **Step 5: Run the test to confirm it passes**
 
 ```bash
-cd backend
-pytest tests/api/v1/test_devices.py::test_device_ready_updates_status_and_last_seen_at -v
+cd /data/workspaces/3IS-Auto-App
+pytest tests/backend/test_devices.py::test_device_ready_updates_status_and_last_seen_at -v
 ```
 
 Expected: `PASSED`. If a `local_path` column is missing on `Attachment`, also add it via Alembic (see T2 pattern).
@@ -395,8 +403,7 @@ Expected: `PASSED`. If a `local_path` column is missing on `Attachment`, also ad
 - [ ] **Step 6: Commit**
 
 ```bash
-cd ..
-git add backend/api/v1/devices.py backend/api/router.py backend/tests/ backend/pyproject.toml
+git add backend/api/v1/devices.py backend/api/router.py tests/backend/test_devices.py
 git commit -m "feat(backend): POST /api/v1/devices/{id}/ready endpoint"
 ```
 
@@ -405,46 +412,55 @@ git commit -m "feat(backend): POST /api/v1/devices/{id}/ready endpoint"
 ### Task T4: Backend — Test `POST /api/v1/devices/{device_id}/download-ack`
 
 **Files:**
-- Modify: `backend/tests/api/v1/test_devices.py`
+- Modify: `tests/backend/test_devices.py`
 
 - [ ] **Step 1: Add the second test**
 
-Append to `backend/tests/api/v1/test_devices.py`:
+Append to `tests/backend/test_devices.py`:
 
 ```python
 @pytest.mark.asyncio
-async def test_device_download_ack_persists_local_path_and_marks_busy_on_partial_failure():
-    # Pre-condition: assume a device row exists (use the same /ready call)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        await ac.post("/api/v1/devices/device-002/ready", json={"status": "READY"})
+async def test_device_download_ack_persists_local_path_and_marks_busy_on_partial_failure(db_engine):
+    SessionLocal = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
 
-        resp = await ac.post(
-            "/api/v1/devices/device-002/download-ack",
-            json={
-                "transaction_id": "TXN-TEST-0001",
-                "files": [
-                    {
-                        "attachment_id": "att_test01",
-                        "local_path": "/sdcard/3is/att_test01.jpg",
-                        "success": True,
-                    }
-                ],
-                "all_success": False,
-                "sandbox_clear_failed": True,
-                "completed_at": "2026-06-13T10:00:00Z",
-            },
-        )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["transaction_id"] == "TXN-TEST-0001"
-    assert body["next_state"] == "RETRY_REQUIRED"
+    async def override_get_db():
+        async with SessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            await ac.post("/api/v1/devices/device-002/ready", json={"status": "READY"})
+
+            resp = await ac.post(
+                "/api/v1/devices/device-002/download-ack",
+                json={
+                    "transaction_id": "TXN-TEST-0001",
+                    "files": [
+                        {
+                            "attachment_id": "att_test01",
+                            "local_path": "/sdcard/3is/att_test01.jpg",
+                            "success": True,
+                        }
+                    ],
+                    "all_success": False,
+                    "sandbox_clear_failed": True,
+                    "completed_at": "2026-06-13T10:00:00Z",
+                },
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["transaction_id"] == "TXN-TEST-0001"
+        assert body["next_state"] == "RETRY_REQUIRED"
+    finally:
+        app.dependency_overrides.clear()
 ```
 
 - [ ] **Step 2: Run the test**
 
 ```bash
-cd backend
-pytest tests/api/v1/test_devices.py -v
+cd /data/workspaces/3IS-Auto-App
+pytest tests/backend/test_devices.py -v
 ```
 
 Expected: both tests pass. If `attachment_id="att_test01"` is not present in the DB and the inner `select` returns `None`, the endpoint silently skips the `local_path` write — that is the spec'd behavior, not a failure.
@@ -452,8 +468,7 @@ Expected: both tests pass. If `attachment_id="att_test01"` is not present in the
 - [ ] **Step 3: Commit**
 
 ```bash
-cd ..
-git add backend/tests/api/v1/test_devices.py
+git add tests/backend/test_devices.py
 git commit -m "test(backend): download-ack happy-path + partial-failure cases"
 ```
 
