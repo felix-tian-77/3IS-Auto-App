@@ -45,36 +45,53 @@ class Downloader(private val sandbox: SandboxManager) {
         val target = sandbox.pathFor(info.attachmentId, info.ext)
         val tmp = File(target.parentFile, "${info.attachmentId}.${info.ext}.part")
         return try {
-            val req = Request.Builder().url(info.url).build()
-            http.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    val reason = if (resp.code == 403 || resp.code == 410) "URL_EXPIRED" else "NETWORK_ERROR"
-                    return DownloadResult(info.attachmentId, target.absolutePath, false, reason)
-                }
-                val body = resp.body ?: return DownloadResult(info.attachmentId, target.absolutePath, false, "IO_ERROR")
-                tmp.outputStream().use { out ->
-                    body.byteStream().copyTo(out)
-                }
-                val md5 = md5Of(tmp)
-                if (!md5.equals(info.md5, ignoreCase = true)) {
-                    tmp.delete()
-                    return DownloadResult(info.attachmentId, target.absolutePath, false, "MD5_MISMATCH")
-                }
-                if (target.exists()) target.delete()
-                if (!tmp.renameTo(target)) {
-                    return DownloadResult(info.attachmentId, target.absolutePath, false, "IO_ERROR")
-                }
-                DownloadResult(info.attachmentId, target.absolutePath, true)
+            attemptDownload(info, target, tmp)
+        } catch (io: java.io.IOException) {
+            // Retry once on transient network error (spec §4.4)
+            tmp.delete()
+            try {
+                kotlinx.coroutines.runBlocking { kotlinx.coroutines.delay(1000) }
+                attemptDownload(info, target, tmp)
+            } catch (io2: java.io.IOException) {
+                tmp.delete()
+                DownloadResult(info.attachmentId, target.absolutePath, false, "NETWORK_ERROR")
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                tmp.delete()
+                throw ce
+            } catch (sec: SecurityException) {
+                tmp.delete()
+                DownloadResult(info.attachmentId, target.absolutePath, false, "IO_ERROR")
             }
         } catch (ce: kotlinx.coroutines.CancellationException) {
             tmp.delete()
             throw ce
-        } catch (io: java.io.IOException) {
-            tmp.delete()
-            DownloadResult(info.attachmentId, target.absolutePath, false, "NETWORK_ERROR")
         } catch (sec: SecurityException) {
             tmp.delete()
             DownloadResult(info.attachmentId, target.absolutePath, false, "IO_ERROR")
+        }
+    }
+
+    private fun attemptDownload(info: UrlInfo, target: File, tmp: File): DownloadResult {
+        val req = Request.Builder().url(info.url).build()
+        http.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                val reason = if (resp.code == 403 || resp.code == 410) "URL_EXPIRED" else "NETWORK_ERROR"
+                return DownloadResult(info.attachmentId, target.absolutePath, false, reason)
+            }
+            val body = resp.body ?: return DownloadResult(info.attachmentId, target.absolutePath, false, "IO_ERROR")
+            tmp.outputStream().use { out ->
+                body.byteStream().copyTo(out)
+            }
+            val md5 = md5Of(tmp)
+            if (!md5.equals(info.md5, ignoreCase = true)) {
+                tmp.delete()
+                return DownloadResult(info.attachmentId, target.absolutePath, false, "MD5_MISMATCH")
+            }
+            if (target.exists()) target.delete()
+            if (!tmp.renameTo(target)) {
+                return DownloadResult(info.attachmentId, target.absolutePath, false, "IO_ERROR")
+            }
+            return DownloadResult(info.attachmentId, target.absolutePath, true)
         }
     }
 
