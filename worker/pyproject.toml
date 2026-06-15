@@ -17,3 +17,9 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+# Isolate worker tests from the root pytest.ini (which has asyncio_mode=auto).
+# The worker has no async tests in the MVP; add async ones here if needed later.
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
