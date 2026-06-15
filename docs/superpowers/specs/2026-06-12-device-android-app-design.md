@@ -44,9 +44,9 @@
        └────────────┘               └────────────┘
 
        /sdcard/3is/                      ← 公共可读, 保险 APP File(...) 直接访问
-              ├ idcard_front_9f8c1b2a.jpg
-              ├ idcard_back_3d4e5f60.jpg
-              └ ...                       命名规则: <file_type>_<attachment_id[:8]>.<ext>
+              ├ att_9f8c1b2a.jpg
+              ├ att_3d4e5f60.jpg
+              └ ...                       命名规则: <attachment_id>.<ext>
                                           Device 端自维护(下载前+服务启动时清空)
 ```
 
@@ -188,17 +188,17 @@ class SandboxManager {
 字段语义:
 
 - `transaction_id`:仅用于 download-ack 回传(沙箱不再分目录,Device 不依赖它写文件)
-- `attachment_id`:Backend 端 attachment 主键全量字符串;Device 取其**前 8 位**作为文件名后缀,保证一笔事务内文件名全局唯一
-- `file_type`:语义化前缀,可重复(如 `idcard_front` / `idcard_back`);**不再单独承担唯一性**
+- `attachment_id`:Backend 端 attachment 主键全量字符串;**Device 直接用作文件名主体**,保证全局唯一
+- `file_type`:业务语义标签(如 `idcard_front` / `idcard_back`),Device 仅原样回传到 ack,**不参与文件命名**;允许重复
 - `ext`:文件扩展名;**Worker 必须发送**(见 §3.6.2);若缺省,Device fallback 为 `bin`(仅作兼容兜底)
 - `md5`:必填,校验失败视为下载失败
 
 文件命名规则(Device 端):
 
-- 落地路径 = `/sdcard/3is/<file_type>_<attachment_id[:8]>.<ext>`
-- 示例:`/sdcard/3is/idcard_front_9f8c1b2a.jpg`
-- 即使 Worker 误发同一 `(file_type, attachment_id)` 两次,文件名也确定相同 → 第二次覆盖第一次,语义等价于"幂等重下"
-- 不同 `attachment_id` 永远落到不同文件名 → 不会发生隐式覆盖
+- 落地路径 = `/sdcard/3is/<attachment_id>.<ext>`
+- 示例:`/sdcard/3is/att_9f8c1b2a.jpg`
+- `attachment_id` 由 Backend 保证全局唯一,因此一笔事务内不会发生文件名冲突
+- Worker 误发同一 `attachment_id` 两次,文件名相同 → 第二次覆盖第一次,语义等价于"幂等重下"
 
 #### 3.1.2 心跳/控制消息
 
@@ -231,13 +231,13 @@ Content-Type: application/json
     {
       "attachment_id": "att_9f8c1b2a",
       "file_type": "idcard_front",
-      "local_path": "/sdcard/3is/idcard_front_9f8c1b2a.jpg",
+      "local_path": "/sdcard/3is/att_9f8c1b2a.jpg",
       "success": true
     },
     {
       "attachment_id": "att_3d4e5f60",
       "file_type": "idcard_back",
-      "local_path": "/sdcard/3is/idcard_back_3d4e5f60.jpg",
+      "local_path": "/sdcard/3is/att_3d4e5f60.jpg",
       "success": true
     }
   ],
@@ -249,8 +249,9 @@ Content-Type: application/json
 
 - `all_success` 当且仅当所有附件下载且 MD5 通过
 - 任一文件失败:停止后续下载,失败项 `success=false`,后续未尝试项 `errorReason="SKIPPED_PRIOR_FAIL"`
-- `local_path` 始终为 `/sdcard/3is/<file_type>_<attachment_id[:8]>.<ext>`
+- `local_path` 始终为 `/sdcard/3is/<attachment_id>.<ext>`
 - `attachment_id` 必须回传(Backend 据此精确定位 attachment 记录,见 §3.6.3)
+- `file_type` 原样回传,便于 Backend 日志/审计阅读,**不参与定位**
 - `sandbox_clear_failed=true` 表示本次下载前 `SandboxManager.clear()` 抛 SecurityException 但 Device 仍尝试覆盖写入完成下载;Backend 应据此触发 Worker 用 ADB `rm -rf /sdcard/3is/*` 兜底清理(详见 §4.4)
 
 ### 3.3 Kotlin 数据类
@@ -352,7 +353,7 @@ Worker 在拼 `DOWNLOAD_FILES` 指令 JSON 时,**每个 `download_urls[]` 元素
 
 - `INITIALIZING` → "正在连接 Worker..."
 - `IDLE` → "已连接 · 待命中"
-- `DOWNLOADING` → "下载中: idcard_front (1/3)"
+- `DOWNLOADING` → "下载中: att_9f8c1b2a (1/3)"
 - `STOPPED` → 通知栏移除(`stopForeground`)
 
 状态变量是 `DeviceAgentService` 内 `@Volatile var state: ServiceState`,所有切换同步更新 `NotificationManager`。
@@ -472,7 +473,7 @@ suspend fun download(urls: List<UrlInfo>): List<DownloadResult> {
 | 1 | 首次安装 | `adb install app-debug.apk` → 点图标 | 弹"前往设置授权"页;授权后 Service 启动,通知栏显示 INITIALIZING |
 | 2 | Worker 离线启动 | Worker 未启动 → 启动 APP | 通知栏显示"无法连接 Worker · 重试中";logcat 见指数退避 |
 | 3 | Worker 上线连接 | 启动 Worker → APP 已运行 | ≤16s 内通知栏切到"已连接 · 待命中" |
-| 4 | 正常下载 | Worker 推 `DOWNLOAD_FILES`(2 文件,含同 `file_type=idcard_front` 不同 `attachment_id` 的反例验证) | `/sdcard/3is/` 出现 `idcard_front_<id1>.jpg` + `idcard_back_<id2>.jpg`,**两文件互不覆盖**;Backend 收到 `download-ack` 且 `all_success=true` |
+| 4 | 正常下载 | Worker 推 `DOWNLOAD_FILES`(2 文件,含同 `file_type=idcard_front` 不同 `attachment_id` 的反例验证) | `/sdcard/3is/` 出现 `<att_id1>.jpg` + `<att_id2>.jpg`,**两文件互不覆盖**;Backend 收到 `download-ack` 且 `all_success=true` |
 | 5 | MD5 校验失败 | mock backend 返回错内容 | `download-ack` 中该项 `success=false errorReason=MD5_MISMATCH`;后续项 `SKIPPED_PRIOR_FAIL` |
 | 6 | 沙箱清理(下载前) | 跑 1 次下载 → 再跑 1 次下载 | 第二次下载开始前 `/sdcard/3is/` 仅有第二次的文件 |
 | 7 | 沙箱清理(服务重启) | 跑下载留下文件 → 强杀 APP → 重启 | `onCreate` 擦掉旧文件后再连接 |
@@ -480,7 +481,7 @@ suspend fun download(urls: List<UrlInfo>): List<DownloadResult> {
 | 9 | 跨 APP 可见 | 任意第三方文件管理器 APP | 能看到 `/sdcard/3is/` 中文件 |
 | 10 | 权限被吊销 | 系统设置取消 `MANAGE_EXTERNAL_STORAGE` | Service 在下次清沙箱时检测到,切 STOPPED 通知栏提示 |
 | 11 | 沙箱清理被 ROM 拒绝(回退契约) | `adb push` 一个非 Device Agent 创建的文件到 `/sdcard/3is/foo.bin` → 触发下载 | `clear()` 抛 SecurityException 但权限仍在 → Device 不切 STOPPED,继续覆盖式下载;`download-ack` 中 `sandbox_clear_failed=true` |
-| 12 | 跨 APP read 验证 | `adb shell run-as <test_pkg> cat /sdcard/3is/idcard_front_*.jpg \| wc -c` 或最小 demo APK 调 `File("/sdcard/3is/idcard_front_xxx.jpg").readBytes()` | 能读到完整字节,长度与 Backend 原文件一致(场景 9 仅验证文件管理器可见,本场景验证业务 APP 实际可消费) |
+| 12 | 跨 APP read 验证 | `adb shell run-as <test_pkg> cat /sdcard/3is/att_*.jpg \| wc -c` 或最小 demo APK 调 `File("/sdcard/3is/att_xxx.jpg").readBytes()` | 能读到完整字节,长度与 Backend 原文件一致(场景 9 仅验证文件管理器可见,本场景验证业务 APP 实际可消费) |
 
 #### Mock Worker 脚本(放 `android/scripts/mock_worker.py`)
 
