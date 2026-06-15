@@ -5,6 +5,7 @@ from sqlalchemy import select
 from backend.db.database import get_db
 from backend.models.device import Device, DeviceStatus
 from backend.models.attachment import Attachment
+from backend.models.transaction import Transaction
 from backend.schemas.device import (
     DeviceReadyRequest,
     DeviceReadyResponse,
@@ -65,6 +66,17 @@ async def device_download_ack(
     else:
         device.status = DeviceStatus.BUSY
         next_state = "RETRY_REQUIRED"
+
+    # Stamp the transaction's finish time when the full download set succeeded.
+    # Spec §3.2.2 mandates `completed_at` in the ack body; `Transaction` tracks
+    # this as `finished_at` (see backend/models/transaction.py).
+    if req.all_success:
+        txn_result = await db.execute(
+            select(Transaction).where(Transaction.transaction_id == req.transaction_id)
+        )
+        txn = txn_result.scalar_one_or_none()
+        if txn is not None:
+            txn.finished_at = req.completed_at
 
     # Persist local_path back to the matching attachment rows
     for f in req.files:
