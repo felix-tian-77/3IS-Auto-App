@@ -15,7 +15,8 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.DeviceAgent"
         android:allowBackup="false"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
