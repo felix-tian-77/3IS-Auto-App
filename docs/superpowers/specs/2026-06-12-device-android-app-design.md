@@ -44,9 +44,10 @@
        └────────────┘               └────────────┘
 
        /sdcard/3is/                      ← 公共可读, 保险 APP File(...) 直接访问
-              ├ idcard.jpg
-              ├ phone.jpg
-              └ ...                       Device 端自维护(下载前+服务启动时清空)
+              ├ idcard_front_9f8c1b2a.jpg
+              ├ idcard_back_3d4e5f60.jpg
+              └ ...                       命名规则: <file_type>_<attachment_id[:8]>.<ext>
+                                          Device 端自维护(下载前+服务启动时清空)
 ```
 
 ### 1.1 技术选型
@@ -166,16 +167,18 @@ class SandboxManager {
     "transaction_id": "TXN-20260612-abc12345",
     "download_urls": [
       {
-        "file_type": "idcard",
+        "attachment_id": "att_9f8c1b2a",
+        "file_type": "idcard_front",
         "url": "https://backend.example.com/api/v1/downloads/{att_id}?token=<jwt>",
         "md5": "9e107d9d372bb6826bd81d3542a419d6",
         "ext": "jpg"
       },
       {
-        "file_type": "phone",
+        "attachment_id": "att_3d4e5f60",
+        "file_type": "idcard_back",
         "url": "https://backend.example.com/api/v1/downloads/{att_id}?token=<jwt>",
         "md5": "8a08c4d3f9ab12...",
-        "ext": "pdf"
+        "ext": "jpg"
       }
     ]
   }
@@ -185,9 +188,17 @@ class SandboxManager {
 字段语义:
 
 - `transaction_id`:仅用于 download-ack 回传(沙箱不再分目录,Device 不依赖它写文件)
-- `file_type`:作为文件名前半段 → `/sdcard/3is/idcard.jpg`
-- `ext`:文件扩展名;缺省时 fallback 为 `bin`
+- `attachment_id`:Backend 端 attachment 主键全量字符串;Device 取其**前 8 位**作为文件名后缀,保证一笔事务内文件名全局唯一
+- `file_type`:语义化前缀,可重复(如 `idcard_front` / `idcard_back`);**不再单独承担唯一性**
+- `ext`:文件扩展名;**Worker 必须发送**(见 §3.6.2);若缺省,Device fallback 为 `bin`(仅作兼容兜底)
 - `md5`:必填,校验失败视为下载失败
+
+文件命名规则(Device 端):
+
+- 落地路径 = `/sdcard/3is/<file_type>_<attachment_id[:8]>.<ext>`
+- 示例:`/sdcard/3is/idcard_front_9f8c1b2a.jpg`
+- 即使 Worker 误发同一 `(file_type, attachment_id)` 两次,文件名也确定相同 → 第二次覆盖第一次,语义等价于"幂等重下"
+- 不同 `attachment_id` 永远落到不同文件名 → 不会发生隐式覆盖
 
 #### 3.1.2 心跳/控制消息
 
@@ -217,22 +228,36 @@ Content-Type: application/json
 {
   "transaction_id": "TXN-20260612-abc12345",
   "files": [
-    { "file_type": "idcard", "local_path": "/sdcard/3is/idcard.jpg", "success": true },
-    { "file_type": "phone",  "local_path": "/sdcard/3is/phone.pdf",  "success": true }
+    {
+      "attachment_id": "att_9f8c1b2a",
+      "file_type": "idcard_front",
+      "local_path": "/sdcard/3is/idcard_front_9f8c1b2a.jpg",
+      "success": true
+    },
+    {
+      "attachment_id": "att_3d4e5f60",
+      "file_type": "idcard_back",
+      "local_path": "/sdcard/3is/idcard_back_3d4e5f60.jpg",
+      "success": true
+    }
   ],
   "all_success": true,
+  "sandbox_clear_failed": false,
   "completed_at": "2026-06-12T08:30:15.123Z"
 }
 ```
 
 - `all_success` 当且仅当所有附件下载且 MD5 通过
 - 任一文件失败:停止后续下载,失败项 `success=false`,后续未尝试项 `errorReason="SKIPPED_PRIOR_FAIL"`
-- `local_path` 始终为 `/sdcard/3is/<file_type>.<ext>`
+- `local_path` 始终为 `/sdcard/3is/<file_type>_<attachment_id[:8]>.<ext>`
+- `attachment_id` 必须回传(Backend 据此精确定位 attachment 记录,见 §3.6.3)
+- `sandbox_clear_failed=true` 表示本次下载前 `SandboxManager.clear()` 抛 SecurityException 但 Device 仍尝试覆盖写入完成下载;Backend 应据此触发 Worker 用 ADB `rm -rf /sdcard/3is/*` 兜底清理(详见 §4.4)
 
 ### 3.3 Kotlin 数据类
 
 ```kotlin
 data class UrlInfo(
+    val attachmentId: String,
     val fileType: String,
     val url: String,
     val md5: String,
@@ -245,6 +270,7 @@ data class DownloadInstruction(
 )
 
 data class DownloadResult(
+    val attachmentId: String,
     val fileType: String,
     val localPath: String,
     val success: Boolean,
@@ -270,12 +296,31 @@ JSON 反序列化用 `org.json.JSONObject` 手写。
 - **Service 重启**:`/sdcard/3is/` 内旧文件在 `onCreate` 被擦除,语义上等价于"重发指令"
 - **进程被杀**:Foreground Service 大概率被系统重启(`START_STICKY`),但进行中的下载丢失;Worker 端通过 `download-ack` 超时检测此情况
 
-### 3.6 与现有 Backend 的差异(必须改)
+### 3.6 Backend & Worker 协同改造清单(必须改)
 
-当前 backend `backend/api/router.py` 仅注册了 `transactions / workers / downloads / statistics / tasks`。本 spec 在范围内同步要求 Backend 端补两个端点,实施计划应作为单独任务列出:
+本 spec 引入了新协议字段与新文件命名规则,需要 Backend 与 Worker 端同步改造。实施计划应将以下三组改造单独列出,**任何一组未完成都会导致 Device 在真实环境下不可用**。
+
+#### 3.6.1 Backend 新增端点
+
+当前 backend `backend/api/router.py` 仅注册了 `transactions / workers / downloads / statistics / tasks`,需补:
 
 - `POST /api/v1/devices/{device_id}/ready` — 更新 `devices` 表 `status=ONLINE, last_seen_at=now()`
-- `POST /api/v1/devices/{device_id}/download-ack` — 触发事务状态机进入 `READY`(与 PRD §3.4 状态机对齐)
+- `POST /api/v1/devices/{device_id}/download-ack` — 触发事务状态机进入 `READY`(与 PRD §3.4 状态机对齐),并消费扩展字段(见 §3.6.3)
+
+#### 3.6.2 Worker 端协议改造(发送侧)
+
+Worker 在拼 `DOWNLOAD_FILES` 指令 JSON 时,**每个 `download_urls[]` 元素必须包含 `ext` 字段**。来源:Backend 在派发任务时将 attachment 的 `file_format`(JPG/PNG/PDF)随任务一并下发给 Worker;Worker 透传到 Device。
+
+- 影响文件:`worker/main.py`(指令拼装处)、`worker/...`(任务消费处,如有 schema)
+- Device 端 fallback(URL Content-Type 推断 / `bin`)仅作为兼容老 Worker 的兜底,**不是稳态契约**
+- Backend 端 `tasks/poll` 响应若不含 `ext`,实施计划需同步补齐
+
+#### 3.6.3 Backend 端 download-ack 字段消费
+
+`download-ack` 请求体新增两个扩展字段(详见 §3.2.2 与 §4.4):
+
+- `sandbox_clear_failed: bool`(可选,默认 false) — Device 在本次下载前清沙箱失败时置 true,Backend 应据此决定是否触发 Worker 用 ADB `rm -rf` 兜底
+- `files[].attachment_id: string` — 对齐文件名后缀的 attachment 短 ID(见 §3.1.1 命名规则),Backend 据此把 `local_path` 写回对应 attachment 记录,而不是按 `file_type` 模糊匹配
 
 ## 4. 生命周期 / 状态机
 
@@ -307,7 +352,7 @@ JSON 反序列化用 `org.json.JSONObject` 手写。
 
 - `INITIALIZING` → "正在连接 Worker..."
 - `IDLE` → "已连接 · 待命中"
-- `DOWNLOADING` → "下载中: idcard.jpg (1/3)"
+- `DOWNLOADING` → "下载中: idcard_front (1/3)"
 - `STOPPED` → 通知栏移除(`stopForeground`)
 
 状态变量是 `DeviceAgentService` 内 `@Volatile var state: ServiceState`,所有切换同步更新 `NotificationManager`。
@@ -378,7 +423,8 @@ suspend fun download(urls: List<UrlInfo>): List<DownloadResult> {
 | MD5 不匹配 | `downloadOne()` 校验 | 不重试;`errorReason=MD5_MISMATCH` |
 | URL 403/410 | OkHttp 返回码 | `errorReason=URL_EXPIRED` |
 | 写文件 IOException | `FileOutputStream` | `errorReason=IO_ERROR`;短路后续 |
-| `MANAGE_EXTERNAL_STORAGE` 运行时被吊销 | `sandboxManager.clear()` 抛 SecurityException | 状态切 STOPPED;通知栏点击拉起 MainActivity 重新引导 |
+| `MANAGE_EXTERNAL_STORAGE` 运行时被吊销 | `sandboxManager.clear()` 抛 SecurityException **且** `Environment.isExternalStorageManager()==false` | 状态切 STOPPED;通知栏点击拉起 MainActivity 重新引导 |
+| 沙箱清理被 ROM 拒绝(权限仍在) | `clear()` 抛 SecurityException **但** `Environment.isExternalStorageManager()==true`(典型场景:厂商 ROM 拒删非自家应用创建的文件) | 不切 STOPPED;**继续执行覆盖式下载**(同名文件可被自家 APP 覆盖写);在 `download-ack` 中置 `sandbox_clear_failed=true`,由 Backend 触发 Worker 用 ADB `rm -rf /sdcard/3is/*` 兜底(详见 §3.6.3 与 §3.2.2)|
 | Service 被系统杀 | — | `START_STICKY` 自动重启;进行中事务丢失,Worker 通过 ack 超时检测 |
 
 ### 4.5 停止序列
@@ -426,13 +472,15 @@ suspend fun download(urls: List<UrlInfo>): List<DownloadResult> {
 | 1 | 首次安装 | `adb install app-debug.apk` → 点图标 | 弹"前往设置授权"页;授权后 Service 启动,通知栏显示 INITIALIZING |
 | 2 | Worker 离线启动 | Worker 未启动 → 启动 APP | 通知栏显示"无法连接 Worker · 重试中";logcat 见指数退避 |
 | 3 | Worker 上线连接 | 启动 Worker → APP 已运行 | ≤16s 内通知栏切到"已连接 · 待命中" |
-| 4 | 正常下载 | Worker 推 `DOWNLOAD_FILES`(2 文件) | `/sdcard/3is/` 出现 idcard.jpg+phone.jpg;Backend 收到 `download-ack` 且 `all_success=true` |
+| 4 | 正常下载 | Worker 推 `DOWNLOAD_FILES`(2 文件,含同 `file_type=idcard_front` 不同 `attachment_id` 的反例验证) | `/sdcard/3is/` 出现 `idcard_front_<id1>.jpg` + `idcard_back_<id2>.jpg`,**两文件互不覆盖**;Backend 收到 `download-ack` 且 `all_success=true` |
 | 5 | MD5 校验失败 | mock backend 返回错内容 | `download-ack` 中该项 `success=false errorReason=MD5_MISMATCH`;后续项 `SKIPPED_PRIOR_FAIL` |
 | 6 | 沙箱清理(下载前) | 跑 1 次下载 → 再跑 1 次下载 | 第二次下载开始前 `/sdcard/3is/` 仅有第二次的文件 |
 | 7 | 沙箱清理(服务重启) | 跑下载留下文件 → 强杀 APP → 重启 | `onCreate` 擦掉旧文件后再连接 |
 | 8 | 进程被杀恢复 | `adb shell am force-stop com.threeis.deviceagent` | `START_STICKY` 几秒内自动拉起;通知栏恢复 |
 | 9 | 跨 APP 可见 | 任意第三方文件管理器 APP | 能看到 `/sdcard/3is/` 中文件 |
 | 10 | 权限被吊销 | 系统设置取消 `MANAGE_EXTERNAL_STORAGE` | Service 在下次清沙箱时检测到,切 STOPPED 通知栏提示 |
+| 11 | 沙箱清理被 ROM 拒绝(回退契约) | `adb push` 一个非 Device Agent 创建的文件到 `/sdcard/3is/foo.bin` → 触发下载 | `clear()` 抛 SecurityException 但权限仍在 → Device 不切 STOPPED,继续覆盖式下载;`download-ack` 中 `sandbox_clear_failed=true` |
+| 12 | 跨 APP read 验证 | `adb shell run-as <test_pkg> cat /sdcard/3is/idcard_front_*.jpg \| wc -c` 或最小 demo APK 调 `File("/sdcard/3is/idcard_front_xxx.jpg").readBytes()` | 能读到完整字节,长度与 Backend 原文件一致(场景 9 仅验证文件管理器可见,本场景验证业务 APP 实际可消费) |
 
 #### Mock Worker 脚本(放 `android/scripts/mock_worker.py`)
 
@@ -446,7 +494,7 @@ msg = {
     "params": {
         "transaction_id": "TXN-MOCK-0001",
         "download_urls": [
-            {"file_type": "idcard", "url": sys.argv[1], "md5": sys.argv[2], "ext": "jpg"}
+            {"attachment_id": "att_mock0001", "file_type": "idcard_front", "url": sys.argv[1], "md5": sys.argv[2], "ext": "jpg"}
         ]
     }
 }
