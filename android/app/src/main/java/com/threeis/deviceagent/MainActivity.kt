@@ -45,7 +45,10 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.saved), Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.btnStopService).setOnClickListener {
-            stopService(Intent(this, DeviceAgentService::class.java))
+            val i = Intent(this, DeviceAgentService::class.java).apply {
+                action = DeviceAgentService.ACTION_STOP
+            }
+            startService(i)
         }
     }
 
