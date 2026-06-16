@@ -6,7 +6,9 @@ import com.threeis.deviceagent.data.UrlInfo
 import com.threeis.deviceagent.util.Logger
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.BufferedWriter
 import java.io.InputStreamReader
+import java.io.OutputStreamWriter
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -19,6 +21,9 @@ class SocketClient(
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
 
+    @Volatile private var currentWriter: BufferedWriter? = null
+    private val writeLock = Any()
+
     fun start() {
         if (!running.compareAndSet(false, true)) return
         thread = Thread({ runLoop() }, "3is-socket-client").also { it.start() }
@@ -30,6 +35,22 @@ class SocketClient(
         thread = null
     }
 
+    fun sendAck(payload: Map<String, Any?>) {
+        val line = JSONObject(payload).toString() + "\n"
+        synchronized(writeLock) {
+            val w = currentWriter ?: run {
+                Logger.w("sendAck called but no active connection")
+                return
+            }
+            try {
+                w.write(line)
+                w.flush()
+            } catch (e: Exception) {
+                Logger.e("sendAck failed: ${e.message}", e)
+            }
+        }
+    }
+
     private fun runLoop() {
         val backoff = longArrayOf(1_000, 2_000, 4_000, 8_000, 16_000, 30_000)
         var idx = 0
@@ -38,14 +59,24 @@ class SocketClient(
                 Logger.i("connecting to ${config.workerHost}:${config.workerPort}")
                 Socket(config.workerHost, config.workerPort).use { sock ->
                     sock.soTimeout = 0
-                    onConnected()
-                    idx = 0
-                    val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
-                    var line: String?
-                    while (running.get() && reader.readLine().also { line = it } != null) {
-                        val text = line ?: continue
-                        val msg = tryParse(text) ?: continue
-                        handleMessage(msg)
+                    val writer = BufferedWriter(OutputStreamWriter(sock.getOutputStream(), Charsets.UTF_8))
+                    synchronized(writeLock) {
+                        currentWriter = writer
+                    }
+                    try {
+                        onConnected()
+                        idx = 0
+                        val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
+                        var line: String?
+                        while (running.get() && reader.readLine().also { line = it } != null) {
+                            val text = line ?: continue
+                            val msg = tryParse(text) ?: continue
+                            handleMessage(msg)
+                        }
+                    } finally {
+                        synchronized(writeLock) {
+                            currentWriter = null
+                        }
                     }
                 }
             } catch (e: Exception) {

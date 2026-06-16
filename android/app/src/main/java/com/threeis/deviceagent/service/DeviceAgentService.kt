@@ -83,6 +83,23 @@ class DeviceAgentService : Service() {
                 allSuccess = allOk,
                 sandboxClearFailed = clearFailed,
             )
+            val filesPayload = results.map { r ->
+                val base = mutableMapOf<String, Any?>(
+                    "attachment_id" to r.attachmentId,
+                    "local_path" to r.localPath,
+                    "success" to r.success,
+                )
+                if (r.errorReason != null) base["error_reason"] = r.errorReason
+                base
+            }
+            socket?.sendAck(
+                mapOf(
+                    "event" to "DOWNLOAD_COMPLETE",
+                    "transaction_id" to instr.transactionId,
+                    "all_success" to allOk,
+                    "files" to filesPayload,
+                )
+            )
             setState(STATE_IDLE, getString(R.string.notification_idle))
         }
     }
