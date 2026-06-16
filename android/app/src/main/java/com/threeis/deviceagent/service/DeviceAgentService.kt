@@ -140,11 +140,24 @@ class DeviceAgentService : Service() {
         startForeground(NOTIF_ID, notification)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            Logger.i("received ACTION_STOP; tearing down")
+            stopSelf()
+        }
+        return START_STICKY
+    }
 
     override fun onDestroy() {
         socket?.stop()
         scope.cancel()
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            Logger.w("stopForeground failed: ${e.message}")
+        }
+        setState(STATE_STOPPED, getString(R.string.notification_stopped))
+        Logger.i("Service destroyed")
         super.onDestroy()
     }
 
@@ -157,5 +170,6 @@ class DeviceAgentService : Service() {
         const val STATE_INITIALIZING = "INITIALIZING"
         const val STATE_IDLE = "IDLE"
         const val STATE_DOWNLOADING = "DOWNLOADING"
+        const val STATE_STOPPED = "STOPPED"
     }
 }
