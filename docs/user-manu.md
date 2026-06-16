@@ -582,6 +582,20 @@ Device 与 Worker 之间是 **TCP Socket 双向通信**,链路为 `adb reverse` 
 - Worker 已启动并监听 8765 端口(见 §4.5)
 - Device 端 `WORKER_HOST` (默认 `192.168.1.100`)与 `WORKER_PORT` (默认 `8765`) 已在 `MainActivity` 配置好;**实际 Socket 连的是设备自身的 `127.0.0.1:8765`**,`WORKER_HOST` 仅用于 Worker 侧的握手与日志标注
 
+### 5.5.1 停止 Device Agent
+
+在 `MainActivity` 点「停止」按钮:
+
+1. 按钮发送 `ACTION_STOP` intent 给 `DeviceAgentService`
+2. `Service.onStartCommand` 收到 action,调用 `stopSelf()` 触发 `onDestroy`
+3. `Service.onDestroy` 依次:
+   - `socket?.stop()` 关闭 Socket 客户端
+   - `scope.cancel()` 取消所有协程
+   - `stopForeground(STOP_FOREGROUND_REMOVE)` 移除通知栏的常驻通知
+4. 通知栏 "3IS Device Agent" 通知消失
+
+**重新启动:** 在设备桌面点应用图标,或执行 `am start -n com.threeis.deviceagent/.MainActivity`。`Application.onCreate` 会自动拉起新的 `Service`。
+
 ### 5.6 Device 目录结构与设备端沙箱
 
 **Android 工程目录(`android/`):**
