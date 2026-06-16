@@ -553,12 +553,28 @@ curl http://localhost:8000/api/v1/workers
 
 ### 5.5 Device Socket 连接说明
 
-Device 通过 TCP Socket 连接到 Worker,链路为 `adb reverse` 反向通道:
+Device 与 Worker 之间是 **TCP Socket 双向通信**,链路为 `adb reverse` 反向通道:
 
 ```
-Device (Android)  ──adb reverse──►  Worker (Desktop) :8765
-       SocketClient 连 127.0.0.1:8765 即等于连 Worker
+┌──────────────────────────┐                  ┌────────────────────────┐
+│  Worker (Desktop) :8765  │                  │  Device (Android)      │
+│                          │  ──DOWNLOAD_FILES (JSON)──►              │
+│                          │ ◄──DOWNLOAD_COMPLETE (JSON)──            │
+│                          │                  │  127.0.0.1:8765        │
+└──────────────────────────┘                  └────────────────────────┘
+              ▲                                          ▲
+              └────────── adb reverse 反向通道 ──────────┘
+
+提示:Device 的 SocketClient 实际连 `127.0.0.1:8765`,通过 `adb reverse` 抵达 Worker。
 ```
+
+- **Worker → Device**:任务到达时推 `DOWNLOAD_FILES` 指令(每行一条 JSON,以 `\n` 结束)
+- **Device → Worker**:下载完成 + 上报 Backend `download-ack` 之后,Device 回送 `DOWNLOAD_COMPLETE` 事件(同样以 `\n` 结束)
+- Worker 在 `worker/device_dispatcher.py:send_and_await_ack` 处阻塞等 ack,默认 120 秒(`worker/config.py:DISPATCH_TIMEOUT`)
+- **超时分支**:Socket 在 timeout 内未收到 `DOWNLOAD_COMPLETE`,Worker 记 `No ack from device for txn ...` 并 `return False`(post-MVP 计划:回写 Backend 标 `FAILED`,详见 `worker/main.py` 旁注 TODO)
+- **失败 ack 分支**:Device 收到指令并下载,但部分文件 MD5 / 网络错误等导致 `all_success=false`(或 `sandbox_clear_failed=true`),Backend 在 `download-ack` 端点把 `Transaction.status` 标为 `RETRY_REQUIRED`(`backend/api/v1/devices.py:68`)
+
+> **排错提示:** 若 mock worker 看到 `No ack from device`,先确认 `adb reverse tcp:8765 tcp:8765` 是否仍有效(USB 断开重连后会失效),再确认 Device 的 `MainActivity` 是否在运行。
 
 **前提条件:**
 - Device 与 Worker 通过 USB 物理连接(adb 已建立)
