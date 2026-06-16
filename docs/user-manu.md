@@ -1096,6 +1096,13 @@ uv run --project backend python scripts/test_integration.py
 
 ## Changelog
 
+**V1.4 (2026-06-16)**
+- §5.1 APK 安装补充 Android 13+ 通知权限运行时授权说明
+- §5.5 Socket 连接说明改写为双向协议(Worker→Device 推 `DOWNLOAD_FILES`,Device→Worker 回送 `DOWNLOAD_COMPLETE`),并细化超时/失败 ack 与 `RETRY_REQUIRED` 归属
+- §5.5.1 新增"停止 Device Agent"小节(`ACTION_STOP` → `stopForeground(STOP_FOREGROUND_REMOVE)`)
+- §7.5 删除虚构的"启动"按钮说法,改为说明 Service 由 `Application.onCreate` 自启
+- §10.4 新增"端到端测试(mock_worker)"章节
+
 **V1.3 (2026-06-15)**
 - §5.1 APK 安装改用 `android/scripts/adb_install.sh` 一键脚本(自动 build + install + MANAGE_EXTERNAL_STORAGE 授权 + `adb reverse` + 拉起 MainActivity);包名从占位 `com.example.deviceagent` 更新为真实 `com.threeis.deviceagent`
 - §5.2 配置 Device:删除 Python `device/.env` 工作流,改为 MainActivity 写入 SharedPreferences,默认值取自 BuildConfig
