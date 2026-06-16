@@ -484,7 +484,9 @@ android/app/build/outputs/apk/debug/app-debug.apk
 bash android/scripts/adb_install.sh
 ```
 
-脚本会自动完成四件事:① `./gradlew :app:assembleDebug` 构建 APK;② `adb install -r app-debug.apk` 安装/覆盖安装;③ `adb shell appops set --uid com.threeis.deviceagent MANAGE_EXTERNAL_STORAGE allow` 授予全盘存储权限;④ `adb reverse tcp:8765 tcp:8765` 把设备的 localhost:8765 反向到桌面 Worker,并 `am start` 拉起 `MainActivity`。
+脚本会自动完成四件事(之后需在设备屏幕上手动点一次通知权限弹窗,见下方 ⑤):① `./gradlew :app:assembleDebug` 构建 APK;② `adb install -r app-debug.apk` 安装/覆盖安装;③ `adb shell appops set --uid com.threeis.deviceagent MANAGE_EXTERNAL_STORAGE allow` 授予全盘存储权限;④ `adb reverse tcp:8765 tcp:8765` 把设备的 localhost:8765 反向到桌面 Worker,并 `am start` 拉起 `MainActivity`。
+
+⑤ **Android 13+ 设备:首次启动后,系统会弹出通知权限请求框,请在设备屏幕点「允许」**。该权限授权后,通知栏才会显示 Foreground Service 的 "3IS Device Agent" 常驻通知;若拒绝,可到 `设置 → 应用 → 3IS Device Agent → 通知` 手动开启。
 
 **方式 2: 手工分步执行**
 
@@ -505,6 +507,8 @@ adb reverse tcp:8765 tcp:8765
 
 # 拉起主界面
 adb shell am start -n com.threeis.deviceagent/.MainActivity
+
+# Android 13+ 设备:首次启动后,系统会弹通知权限框,需在设备屏幕点「允许」。
 ```
 
 ### 5.2 配置 Device
