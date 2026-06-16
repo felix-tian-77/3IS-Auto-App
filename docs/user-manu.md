@@ -787,7 +787,7 @@ Device Agent 在第 5.1 节执行 `bash android/scripts/adb_install.sh` 时已�
 adb shell am start -n com.threeis.deviceagent/.MainActivity
 ```
 
-启动后 `MainActivity` 会显示 4 个配置输入框(Worker host/port/Backend URL/Device ID),按需修改后点击「保存」即可。最后点击「启动」按钮拉起 Foreground Service(通知栏出现 "3IS Device Agent" 常驻通知即表示已就绪)。
+启动后 `MainActivity` 会显示 4 个配置输入框(Worker host/port/Backend URL/Device ID),按需修改后点击「保存」即可。`Foreground Service` 由 `Application.onCreate` 自动拉起(应用并无独立的「启动」按钮),通知栏出现 "3IS Device Agent" 常驻通知即表示已就绪。
 
 ### 7.6 Step 5: 提交测试事务
 
