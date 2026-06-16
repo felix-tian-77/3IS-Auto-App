@@ -1044,6 +1044,54 @@ uv run --project backend python scripts/test_integration.py
 - [PRD 设计文档](./superpowers/specs/2026-06-05-prd-design.md) - 产品需求说明书
 - [架构设计](./superpowers/specs/) - 详细架构文档
 
+### 10.4 端到端测试(mock_worker)
+
+在没有真实 Backend 业务事务的情况下,可以使用 `android/scripts/mock_worker.py` 验证 Device Agent 的下载/校验/回送 ack 链路。
+
+#### 适用场景
+
+- 调试 Device Agent 而不想拉起整个 Backend/Worker 链路
+- 验证下载后文件落在 `/sdcard/3is/` 的正确位置
+- 验证 MD5 校验失败、URL 404 等错误路径
+
+#### 步骤
+
+1. **准备一个测试文件**(本机或局域网可达即可):
+   ```bash
+   printf 'hello-3is' > /tmp/sample.jpg
+   python3 -m http.server 9000 --directory /tmp &
+   # 在另一台机器访问,IP 替换为 http server 所在机器
+   ```
+
+2. **计算 MD5**:
+   ```bash
+   MD5=$(md5sum /tmp/sample.jpg | awk '{print $1}')
+   echo "MD5=$MD5"
+   ```
+
+3. **运行 mock worker**(监听 :8765,接受一个 Device 连接,推一条 `DOWNLOAD_FILES`,等 Device 回 ack):
+   ```bash
+   python3 android/scripts/mock_worker.py "http://<host>:9000/sample.jpg" "$MD5"
+   ```
+   mock worker 会在 stdout 打印:
+   ```
+   Mock worker listening on :8765
+   device connected: ('127.0.0.1', <port>)
+   ack: {"event": "DOWNLOAD_COMPLETE", "transaction_id": "TXN-MOCK-0001", "all_success": true, "files": [...]}
+   ```
+
+4. **设备端验证**(在连接的 Android 设备 / 模拟器):
+   ```bash
+   adb shell ls -la /sdcard/3is/
+   # 预期: att_mock0001.jpg,大小 9 字节("hello-3is")
+   ```
+
+#### 错误路径注入
+
+- **MD5 不匹配**:把 mock_worker 的第二个参数改成错误的 MD5(任意 32 位 hex),Device 会返回 `success=false, error_reason=MD5_MISMATCH`,**不会**回写文件
+- **URL 404**:把 URL 改成不存在的路径,Device 返回 `error_reason=NETWORK_ERROR`(403/410 则是 `URL_EXPIRED`)
+- **Sandbox clear 失败**:在 mock_worker 跑前,先 `adb push foo.bin /sdcard/3is/` 塞一个 Device Agent 创建不了的文件,触发 `clear()` 抛 SecurityException,Device **仍继续覆盖式下载**(不会终止 Service)并在 `download-ack` HTTP body 中带 `sandbox_clear_failed=true`
+
 ---
 
 ## Changelog
