@@ -18,4 +18,6 @@
     <string name="hint_backend_url">Backend URL</string>
     <string name="hint_device_id">Device ID</string>
     <string name="saved">Saved</string>
+    <string name="notification_permission_granted">Notification permission granted</string>
+    <string name="notification_permission_denied">Notification permission denied — foreground service notification will be hidden</string>
 </resources>
