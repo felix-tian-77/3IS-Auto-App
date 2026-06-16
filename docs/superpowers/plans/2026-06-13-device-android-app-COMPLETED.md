@@ -19,7 +19,7 @@ Plan: `docs/superpowers/plans/2026-06-13-device-android-app.md`
 
 | Component | Test command | Result |
 |---|---|---|
-| Backend | `cd backend && .venv/bin/python -m pytest tests/backend/test_devices.py -v` | 3/3 passed |
+| Backend | `backend/.venv/bin/python -m pytest tests/backend/test_devices.py -v` | 3/3 passed |
 | Worker  | `cd worker && .venv/bin/python -m pytest tests/ -v` | 2/2 passed |
 | Android | `cd android && ./gradlew :app:assembleDebug` | **NOT RUN** — sandbox lacks Gradle wrapper + Android SDK + Java 17/21 (Java 25 only). Files are complete; a host with proper tooling can build them. |
 
