@@ -17,6 +17,16 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var config: Config
 
+    private val requestNotificationPermission = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        android.widget.Toast.makeText(
+            this,
+            if (granted) getString(R.string.notification_permission_granted) else getString(R.string.notification_permission_denied),
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -49,6 +59,13 @@ class MainActivity : AppCompatActivity() {
                 action = DeviceAgentService.ACTION_STOP
             }
             startService(i)
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestNotificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 
