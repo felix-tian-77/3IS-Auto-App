@@ -27,16 +27,27 @@ For the spec's 12 manual-acceptance scenarios, see `docs/superpowers/specs/2026-
 
 ## Commit count
 
-Run `git log --oneline 16f863b..HEAD | wc -l` for the live count. As of this doc: **38 commits**.
+Run `git log --oneline 16f863b..HEAD | wc -l` for the live count. As of this doc: **44 commits** (38 initial + 6 post-review fixes).
 
 Approximate breakdown (verified by `git log --oneline`):
 
 - Plan amendments: 3 (T2 amend, T2 smoke-test fix, T3+T4 test-path fix)
 - Backend: 11 (Pydantic schemas, sandbox default, ready endpoint, download-ack endpoint + revert + refactor, aiosqlite pin, 3 tests, style fix)
 - Worker: 7 (DeviceDispatcher + 2 fixes, main-loop wiring, 2 tests, pytest build dep)
-- Android: 14 (Gradle skeleton, manifest+resources, 11 Kotlin source/fix commits, mock+adb scripts)
+- Android: 18 (Gradle skeleton, manifest+resources, 11 Kotlin source/fix commits, mock+adb scripts, SocketClient bidirectional, ACTION_STOP wiring, POST_NOTIFICATIONS, strings refactor)
 - Docs: 2 (T17 user-manu + worker-spec sync, T18 closing notes)
 - Cleanup: 1 (device/ deletion)
+
+## Post-review fixes
+
+After the initial 38-commit landing, a final code review found 3 critical/important bugs in the Android implementation. They were fixed in 6 follow-up commits:
+
+- **T14.2** (`7cac59f`) — SocketClient was read-only; the Device never wrote the `DOWNLOAD_COMPLETE` ack back over the TCP socket. The Worker would hit the 120s timeout on every task. Fix: `SocketClient` now stores an `OutputStream`, exposes `sendAck(payload)`, and the Service calls it after `backend.reportDownloadAck(...)`.
+- **T15.2** (`a866e72`) — `DeviceAgentService.onDestroy` did not call `stopForeground(STOP_FOREGROUND_REMOVE)`, leaving the FGS notification on the device. The `ACTION_STOP` constant was dead code. Fix: `onStartCommand` now honors `ACTION_STOP` via `stopSelf()`; `onDestroy` calls `stopForeground` and sets state to `STATE_STOPPED`.
+- **T15.3** (`5d27f67`, `2f987fb`) — `POST_NOTIFICATIONS` was declared in the manifest but never requested at runtime. On Android 13+ this would suppress the FGS notification silently. Fix: `MainActivity` now requests the permission via `ActivityResultContracts.RequestPermission`, gated on API 33+.
+- **T18.2** (`f095652`) — `COMPLETED.md`'s verification command (`cd backend && .venv/bin/python ...`) resolved to a non-existent path. Fix: the command now uses `backend/.venv/bin/python -m pytest ...` from the repo root.
+
+After the 6 fixes, the implementation passed a second code review (verdict: "Ready to merge: Yes").
 
 ## Known follow-ups (deferred from MVP)
 
