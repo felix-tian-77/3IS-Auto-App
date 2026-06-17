@@ -472,6 +472,8 @@ Device 是简化的 Android Agent，负责:
 
 ### 5.1 APK 安装
 
+> 开发者构建说明(JDK 版本、Gradle 用法、跨平台脚本):见 [`android/README.md`](../android/README.md)。
+
 Device Agent 由 `android/` 目录的 Android 工程构建产出。APK 路径:
 
 ```
