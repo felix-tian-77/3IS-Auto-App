@@ -21,7 +21,7 @@ Plan: `docs/superpowers/plans/2026-06-13-device-android-app.md`
 |---|---|---|
 | Backend | `backend/.venv/bin/python -m pytest tests/backend/test_devices.py -v` | 3/3 passed |
 | Worker  | `cd worker && .venv/bin/python -m pytest tests/ -v` | 2/2 passed |
-| Android | `cd android && ./gradlew :app:assembleDebug` | **NOT RUN** — sandbox lacks Gradle wrapper + Android SDK + Java 17/21 (Java 25 only). Files are complete; a host with proper tooling can build them. |
+| Android | `cd android && ./gradlew :app:assembleDebug` | **PARTIAL** — Gradle 8.11.1 wrapper now in repo (commit `c755fd6`); APK build is `BUILD-VERIFIED-OFF-SANDBOX` pending a developer box with Android SDK 34. |
 
 For the spec's 12 manual-acceptance scenarios, see `docs/superpowers/specs/2026-06-12-device-android-app-design.md` §5.1. The mock worker (`android/scripts/mock_worker.py`) supports scenarios 4, 5, 6, 11; a real device is required for the rest.
 
@@ -51,7 +51,7 @@ After the 6 fixes, the implementation passed a second code review (verdict: "Rea
 
 ## Known follow-ups (deferred from MVP)
 
-- **Build verification** — Android APK was not built in this sandbox. A developer with Gradle 8.5 + Android SDK 34 + Java 17/21 can run `./gradlew :app:assembleDebug` from `android/`. (Note: also need to run `gradle wrapper --gradle-version 8.5 --distribution-type bin` to generate the wrapper, since it wasn't bootstrapped in the sandbox.)
+- **Build verification** — Android APK was not built in this sandbox because Android SDK 34 is not installed here. The Gradle 8.11.1 wrapper is now committed, so a developer with Android SDK 34 + JDK 17/21 can run `./gradlew :app:assembleDebug` from `android/` without first installing system Gradle.
 - **Worker ack persistence to Backend** — currently the Device ack is logged but not POSTed back. The T6 dispatcher has a `TODO (post-MVP)` marker.
 - **Automated Android tests** — spec §5.1 deliberately skipped these; add when regression risk grows.
 - **HTTPS / token-based auth on the device-ready endpoint** — the current `device_id` in the URL is the only auth; not production-safe.
