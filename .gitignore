@@ -34,3 +34,8 @@ htmlcov/
 .env.local
 *.local
 .gstack/
+backend/api/v1/__pycache__/transactions.cpython-312.pyc
+backend/models/__pycache__/__init__.cpython-312.pyc
+backend/models/__pycache__/attachment.cpython-314.pyc
+backend/models/__pycache__/device.cpython-314.pyc
+backend/models/__pycache__/transaction.cpython-312.pyc
