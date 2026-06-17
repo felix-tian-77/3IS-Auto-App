@@ -738,13 +738,14 @@ Ran the writing-plans `/selfreview` checks:
 - **Failure modes addressed** — JDK 25 detection, missing SDK, no `pwsh` on Linux, Gradle slow first download, ExecutionPolicy on Windows
 - **One reviewer-blocking question remains** — see Open Question below
 
-### Open Question (non-blocking, to resolve before T7)
+### Resolved: T7 step 4 host scope
 
-T7 step 4 REQUIRED status assumes the host has Android SDK installed. The current sandbox has JDK only. Two options:
-1. **Install SDK on this host** (sdkmanager standalone, ~3 GB) — then T7 step 4 fully passes here
-2. **Defer T7 step 4 to a developer's box that already has Android Studio**, mark this plan's verification as `BUILD-VERIFIED-OFF-SANDBOX`
+User decision (2026-06-17): **Option 2 — defer T7 step 4 to a developer box.**
 
-User choice will determine T0 scope (currently only covers JDK + Gradle, not SDK).
+- T0 installs only JDK 21 + Gradle 8.11.1 on this sandbox (no Android SDK)
+- T7 items 1–3 must PASS on this sandbox
+- T7 item 4 status = `BUILD-VERIFIED-OFF-SANDBOX` — verification report explicitly notes the gap and points to whoever runs the end-to-end build (developer with Android Studio installed, or Windows colleague running `adb_install.ps1`)
+- T7 step 4 verification command set still documented for the deferred runner
 
 ---
 
