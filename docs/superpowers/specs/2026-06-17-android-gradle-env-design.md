@@ -183,8 +183,10 @@ Change the Android row from:
 ```
 to:
 ```
-| Android | `cd android && ./gradlew :app:assembleDebug` | **PASS** — Gradle 8.11.1 wrapper now in repo. Build verified locally with JDK 21 + Android SDK 34. See `android/README.md` for prerequisites. |
+| Android | `cd android && ./gradlew :app:assembleDebug` | **PARTIAL** — Gradle 8.11.1 wrapper now in repo; APK build is `BUILD-VERIFIED-OFF-SANDBOX` pending a developer box with Android SDK 34. |
 ```
+
+User decision (2026-06-17): this sandbox does not install Android SDK. T7 items 1-3 verify locally; T7 item 4 is deferred to a developer box with Android SDK 34 installed.
 
 Also update the "follow-ups" bullet to remove the `gradle wrapper` bootstrap mention.
 

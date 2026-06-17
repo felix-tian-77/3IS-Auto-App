@@ -679,7 +679,7 @@ Expected: 4 files present; gradlew has exec bit (mode 100755).
 
 ```bash
 cd /data/workspaces/3IS-Auto-App
-JAVA_HOME=/opt/java/current bash android/scripts/adb_install.sh; echo "exit=$?"
+JAVA_HOME=/opt/java/jdk-25.0.2 bash android/scripts/adb_install.sh; echo "exit=$?"
 ```
 
 Expected: exit `1`; stderr mentions `JDK 17 or 21 required (found: 25.`.
@@ -717,7 +717,7 @@ If no Android SDK is available on this host, document the gap explicitly:
 
 - [ ] **Step 5: Write a one-paragraph verification report**
 
-Append to the bottom of this plan file (under a new `## Verification Report` heading) the date, host JDK path, output of `gradle --version` (host), output of `./gradlew --version` (wrapper), and the §12 item 4 result (PASS / BLOCKED-BY-NO-SDK with stderr).
+Append to the bottom of this plan file (under a new `## Verification Report` heading) the date, host JDK path, output of `gradle --version` (host), output of `./gradlew --version` (wrapper), and the §12 item 4 result (`BUILD-VERIFIED-OFF-SANDBOX` with Android SDK absence noted).
 
 - [ ] **Step 6: No commit** — the verification report append is optional and can be a separate commit if the user wants it persisted; T7 itself produces no diff.
 
@@ -746,6 +746,20 @@ User decision (2026-06-17): **Option 2 — defer T7 step 4 to a developer box.**
 - T7 items 1–3 must PASS on this sandbox
 - T7 item 4 status = `BUILD-VERIFIED-OFF-SANDBOX` — verification report explicitly notes the gap and points to whoever runs the end-to-end build (developer with Android Studio installed, or Windows colleague running `adb_install.ps1`)
 - T7 step 4 verification command set still documented for the deferred runner
+
+---
+
+## Verification Report
+
+2026-06-17 sandbox verification:
+
+- Host JDK 21 path: `/opt/java/jdk-21.0.2` (`javac 21.0.2`)
+- Host Gradle 8.11.1 path: `/home/felixtian/.gradle-install/gradle-8.11.1/bin/gradle`
+- Wrapper check: `JAVA_HOME=/opt/java/jdk-21.0.2 ./gradlew --version` prints `Gradle 8.11.1` and `Launcher JVM: 21.0.2`
+- T7 item 1: PASS — 4 wrapper artifacts exist; `android/gradlew` is tracked mode `100755`
+- T7 item 2: PASS — `JAVA_HOME=/opt/java/jdk-25.0.2 bash android/scripts/adb_install.sh; echo "exit=$?"` prints `JDK 17 or 21 required (found: 25.0.2)` and exits `1`
+- T7 item 3: PASS — `SKIP_ENV_VERIFY=1 bash android/scripts/adb_install.sh` prints `SKIP_ENV_VERIFY=1, skipping env checks` before entering Gradle
+- T7 item 4: BUILD-VERIFIED-OFF-SANDBOX — per user decision, this sandbox intentionally has no Android SDK (`ANDROID_HOME unset`, `ANDROID_SDK_ROOT unset`), so the full APK build is deferred to a developer box with Android SDK 34 installed. Deferred runner command: `cd android && JAVA_HOME=<jdk17-or-21> ./gradlew :app:assembleDebug` or `bash scripts/adb_install.sh` after setting `ANDROID_HOME`.
 
 ---
 
