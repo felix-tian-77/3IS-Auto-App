@@ -25,7 +25,7 @@ Install Temurin 21:
 "@
         exit 1
     }
-    $verLine = & $javaBin -version 2>&1 | Select-Object -First 1
+    $verLine = cmd /c "`"$javaBin`" -version 2>&1" | Select-Object -First 1
     if ($verLine -notmatch '"([\d.]+)"') {
         Write-Error "[adb_install] could not parse 'java -version' output: $verLine"
         exit 1
