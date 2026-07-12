@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Enum, DateTime, Integer, Text, ForeignKey, Index
+from sqlalchemy import Column, String, Enum, DateTime, Integer, Text, ForeignKey, Index, Boolean
 from sqlalchemy.sql import func
 from backend.db.database import Base
 import enum
@@ -16,8 +16,8 @@ class TransactionStatus(str, enum.Enum):
     DLQ = "DLQ"
 
 class BusinessType(str, enum.Enum):
-    NEW = "NEW"
-    RENEWAL = "RENEWAL"
+    NEW_VEHICLE = "NEW_VEHICLE"
+    OLD_VEHICLE = "OLD_VEHICLE"
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -38,5 +38,8 @@ class Transaction(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     duration_ms = Column(Integer, nullable=True)
+    tax_exempt = Column(Boolean, default=False, nullable=False)
+    is_transfer = Column(Boolean, default=False, nullable=False)
+    holder_phone = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

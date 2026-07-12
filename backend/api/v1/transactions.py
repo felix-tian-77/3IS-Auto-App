@@ -62,7 +62,10 @@ async def create_transaction(
         )
 
     service = TransactionService(db)
-    result = await service.create_transaction(request, file_data_list)
+    try:
+        result = await service.create_transaction(request, file_data_list)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return result
 
 @router.get("/transactions")
@@ -109,6 +112,9 @@ async def list_transactions(
             "status": t.status,
             "customer_phone_encrypted": t.customer_phone_encrypted,
             "retry_count": t.retry_count,
+            "tax_exempt": t.tax_exempt,
+            "is_transfer": t.is_transfer,
+            "holder_phone": t.holder_phone,
             "created_at": t.created_at.isoformat() if t.created_at else None,
             "started_at": t.started_at.isoformat() if t.started_at else None,
             "finished_at": t.finished_at.isoformat() if t.finished_at else None,
@@ -133,4 +139,7 @@ async def get_transaction(transaction_id: str, db: AsyncSession = Depends(get_db
         "transaction_id": txn.transaction_id,
         "status": txn.status,
         "business_type": txn.business_type,
+        "tax_exempt": txn.tax_exempt,
+        "is_transfer": txn.is_transfer,
+        "holder_phone": txn.holder_phone,
     }

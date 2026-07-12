@@ -10,7 +10,11 @@ import type {
 export async function createTransaction(
   phone: string,
   businessType: string,
-  files: File[]
+  files: File[],
+  fileTypes: string[],
+  taxExempt: boolean = false,
+  isTransfer: boolean = false,
+  holderPhone?: string
 ): Promise<CreateTransactionResponse> {
   const inferFormat = (file: File): string => {
     const type = file.type.toLowerCase();
@@ -22,8 +26,11 @@ export async function createTransaction(
   const transactionPayload = {
     business_type: businessType,
     customer_phone: phone,
-    attachments_meta: files.map((f) => ({
-      file_type: 'OTHER',
+    tax_exempt: taxExempt,
+    is_transfer: isTransfer,
+    holder_phone: holderPhone,
+    attachments_meta: files.map((f, i) => ({
+      file_type: fileTypes[i] || 'OTHER',
       file_format: inferFormat(f),
     })),
   };

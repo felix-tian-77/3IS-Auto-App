@@ -4,8 +4,8 @@ from datetime import datetime
 from enum import Enum
 
 class BusinessType(str, Enum):
-    NEW = "NEW"
-    RENEWAL = "RENEWAL"
+    NEW_VEHICLE = "NEW_VEHICLE"
+    OLD_VEHICLE = "OLD_VEHICLE"
 
 class AttachmentMeta(BaseModel):
     file_type: str
@@ -17,6 +17,9 @@ class TransactionCreateRequest(BaseModel):
     business_type: BusinessType
     customer_phone: Optional[str] = None
     customer_id_no: Optional[str] = None
+    tax_exempt: bool = False
+    is_transfer: bool = False
+    holder_phone: Optional[str] = None
     attachments_meta: List[AttachmentMeta]
 
 class AttachmentResponse(BaseModel):
@@ -33,5 +36,8 @@ class TransactionResponse(BaseModel):
     transaction_id: str
     status: str
     submitted_at: datetime
+    tax_exempt: bool
+    is_transfer: bool
+    holder_phone: Optional[str] = None
     attachments: List[AttachmentResponse]
     estimated_wait: Optional[int] = None

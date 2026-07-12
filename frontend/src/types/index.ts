@@ -10,7 +10,7 @@ export type TransactionStatus =
   | 'FAIL'
   | 'DLQ';
 
-export type BusinessType = 'NEW' | 'RENEWAL';
+export type BusinessType = 'NEW_VEHICLE' | 'OLD_VEHICLE';
 
 export type WorkerStatus = 'ONLINE' | 'OFFLINE' | 'BUSY';
 
@@ -32,6 +32,9 @@ export interface Transaction {
   started_at?: string;
   finished_at?: string;
   duration_ms?: number;
+  tax_exempt: boolean;
+  is_transfer: boolean;
+  holder_phone?: string;
   created_at: string;
   updated_at?: string;
   worker?: Worker;
@@ -140,6 +143,9 @@ export interface WorkerListResponse {
 export interface CreateTransactionResponse {
   transaction_id: string;
   status: TransactionStatus;
+  tax_exempt: boolean;
+  is_transfer: boolean;
+  holder_phone?: string;
   estimated_wait?: number;
   message?: string;
 }

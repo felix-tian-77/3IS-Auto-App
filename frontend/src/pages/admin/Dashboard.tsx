@@ -9,9 +9,9 @@ import {
 import { Column } from '@ant-design/charts';
 import { useNavigate } from 'react-router-dom';
 import { getDashboardStats } from '@/api/transactions';
-import { maskPhone, BUSINESS_TYPE_MAP, formatDateTime } from '@/utils/format';
+import { maskPhone, BUSINESS_TYPE_MAP } from '@/utils/format';
 import StatusBadge from '@/components/StatusBadge';
-import type { DashboardStats, Transaction, TransactionStatus } from '@/types';
+import type { DashboardStats, TransactionStatus } from '@/types';
 
 export default function Dashboard() {
   const navigate = useNavigate();
