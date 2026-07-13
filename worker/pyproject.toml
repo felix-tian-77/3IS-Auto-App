@@ -8,6 +8,8 @@ dependencies = [
     "pocoui==1.0.94",
     "requests==2.34.2",
     "pyyaml==6.0.3",
+    "numpy==2.1.3",
+    "opencv-contrib-python==4.10.0.84",
 ]
 
 [dependency-groups]
@@ -17,6 +19,14 @@ dev = [
 
 [tool.uv]
 package = false
+
+# airtest 1.4.3 pins opencv-contrib-python<=4.6.0.66 (numpy 1.x ABI), which
+# crashes on Python 3.13/3.14. Override to the numpy 2.x-compatible build.
+# Runtime verified OK: airtest only uses basic cv2 APIs.
+override-dependencies = [
+    "opencv-contrib-python==4.10.0.84",
+    "numpy==2.1.3",
+]
 
 [tool.pytest.ini_options]
 # Isolate worker tests from the root pytest.ini (which has asyncio_mode=auto).

@@ -154,8 +154,10 @@ class DashboardService:
             recent_list.append(
                 {
                     "transaction_id": t.transaction_id,
-                    "business_type": t.business_type.value,
-                    "status": t.status.value,
+                    # business_type & status are VARCHAR-backed (see models/*),
+                    # so the attribute comes back as a plain str.
+                    "business_type": t.business_type,
+                    "status": t.status,
                     "customer_phone_encrypted": t.customer_phone_encrypted,
                     "duration_ms": t.duration_ms,
                     "created_at": t.created_at.isoformat() if t.created_at else None,

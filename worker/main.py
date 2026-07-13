@@ -86,15 +86,68 @@ class Worker:
             logger.error("Task poll failed: %e", e)
         return None
 
+    def fetch_download_urls(self, transaction_id: str) -> list:
+        """Ask the Backend to issue signed download URLs for the transaction.
+
+        The signed URLs are what the Device Agent will actually fetch from,
+        so this must happen *after* the poll (which only tells us *what* to do)
+        and *before* we build the TCP instruction.
+        """
+        url = f"{config.BACKEND_URL}/api/v1/transactions/{transaction_id}/download-urls"
+        try:
+            resp = requests.post(url, headers=self.get_headers())
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("download_urls", []) or []
+            logger.error(
+                "download-urls request failed for %s: %s %s",
+                transaction_id, resp.status_code, resp.text,
+            )
+        except Exception as e:
+            logger.error("download-urls request errored for %s: %s", transaction_id, e)
+        return []
+
     def dispatch_to_device(self, task: dict) -> bool:
         if not task.get("task"):
             return False
         txn = task["task"]
-        attachments = task.get("attachments", [])
-        instruction = build_instruction(txn["transaction_id"], attachments)
+        # The poll endpoint nests attachments under "task", not at the top level.
+        attachment_meta = txn.get("attachments", [])
+        # `file_format` in poll uses uppercase ("JPG"); `build_instruction` lowercases.
+        # We pass the metadata through directly — the dict contract is the source of
+        # truth, so field name normalization happens inside `build_instruction`.
+
+        # Step 1: get the signed URLs the Device Agent will actually use.
+        download_urls = self.fetch_download_urls(txn["transaction_id"])
+        if not download_urls:
+            logger.error(
+                "No download URLs issued for txn %s; cannot dispatch",
+                txn["transaction_id"],
+            )
+            return False
+
+        # Step 2: join the signed URLs with attachment metadata by attachment_id.
+        url_by_id = {u["attachment_id"]: u for u in download_urls}
+        combined = []
+        for att in attachment_meta:
+            url_entry = url_by_id.get(att["attachment_id"])
+            if not url_entry:
+                logger.error(
+                    "Missing signed URL for attachment %s (txn %s)",
+                    att["attachment_id"], txn["transaction_id"],
+                )
+                return False
+            combined.append({
+                "attachment_id": att["attachment_id"],
+                "url": url_entry["url"],
+                "md5": att["md5"],
+                "file_format": att["file_format"],
+            })
+
+        instruction = build_instruction(txn["transaction_id"], combined)
         dispatcher = DeviceDispatcher(
-            config.DEVICE_HOST,
-            config.DEVICE_PORT,
+            config.WORKER_LISTEN_HOST,
+            config.PORT,
             ack_timeout_sec=config.DISPATCH_TIMEOUT,
         )
         ack = dispatcher.send_and_await_ack(instruction)

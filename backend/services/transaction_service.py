@@ -1,5 +1,6 @@
 import uuid
 import hashlib
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -8,6 +9,9 @@ from backend.models.transaction import Transaction, TransactionStatus, BusinessT
 from backend.models.attachment import Attachment, FileType
 from backend.schemas.transaction import TransactionCreateRequest
 from backend.storage.local import LocalStorageBackend
+from backend.services.dispatcher_service import DispatcherService
+
+logger = logging.getLogger(__name__)
 
 
 REQUIRED_FILES = {
@@ -111,14 +115,35 @@ class TransactionService:
 
         await self.db.commit()
 
+        # Auto-dispatch: hand the new transaction to an available Worker.
+        # Without this, the transaction would stay in PENDING forever
+        # (assign_transaction is the only place that flips it to DISPATCHED,
+        # and the Frontend never calls /transactions/{id}/download-urls).
+        dispatcher = DispatcherService(self.db)
+        assignment = await dispatcher.assign_transaction(transaction_id)
+        if not assignment.get("assigned"):
+            logger.warning(
+                "Transaction %s created but not dispatched: %s",
+                transaction_id,
+                assignment.get("reason"),
+            )
+
+        final_status = (
+            TransactionStatus.DISPATCHED.value
+            if assignment.get("assigned")
+            else TransactionStatus.PENDING.value
+        )
+
         return {
             "transaction_id": transaction_id,
-            "status": TransactionStatus.PENDING.value,
+            "status": final_status,
             "submitted_at": now.isoformat(),
             "tax_exempt": request.tax_exempt,
             "is_transfer": request.is_transfer,
             "holder_phone": request.holder_phone,
             "estimated_wait": 0,
+            "worker_id": assignment.get("worker_id"),
+            "device_id": assignment.get("device_id"),
             "attachments": [
                 {
                     "attachment_id": a.attachment_id,

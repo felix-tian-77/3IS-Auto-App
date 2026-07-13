@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey
 from backend.db.database import Base
 import enum
 
@@ -26,7 +26,9 @@ class Device(Base):
     battery_level = Column(Integer, default=100)
     storage_free_mb = Column(Integer, default=0)
     screen_locked = Column(Boolean, default=True)
-    status = Column(Enum(DeviceStatus), default=DeviceStatus.OFFLINE)
-    adb_status = Column(Enum(ADBStatus), default=ADBStatus.DISCONNECTED)
+    # See Worker.status: keep these as String to avoid asyncpg ENUM vs varchar
+    # comparison failures; the Python enums still gate assignments at the API layer.
+    status = Column(String(16), default=DeviceStatus.OFFLINE.value)
+    adb_status = Column(String(16), default=ADBStatus.DISCONNECTED.value)
     current_transaction_id = Column(String(32), nullable=True)
     last_seen_at = Column(DateTime(timezone=True), nullable=True)

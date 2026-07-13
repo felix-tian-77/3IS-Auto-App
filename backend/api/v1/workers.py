@@ -154,7 +154,10 @@ async def list_workers(db: AsyncSession = Depends(get_db)):
                 "android_version": device.android_version,
                 "battery_level": device.battery_level,
                 "storage_free_mb": device.storage_free_mb,
-                "status": device.status.value,
+                # Worker/Device status columns are stored as VARCHAR for asyncpg
+                # compatibility (see models/worker.py, models/device.py), so the
+                # attribute is already a plain str — no `.value` extraction.
+                "status": device.status,
             }
 
         worker_list.append({
