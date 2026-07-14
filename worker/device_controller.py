@@ -49,3 +49,41 @@ class DeviceController:
             "android_version": self.shell("getprop ro.build.version.release"),
             "battery_level": battery_level,
         }
+
+    def get_status(self) -> dict:
+        """Collect device status for reporting to backend.
+
+        Returns dict with keys matching WorkerHeartbeatRequest optional fields:
+        battery_level, storage_free_mb, screen_locked, model, android_version.
+        """
+        try:
+            battery_output = self.shell("dumpsys battery | grep level")
+            battery_level = int(battery_output.split(":")[1].strip()) if ":" in battery_output else 0
+        except (IndexError, ValueError):
+            battery_level = 0
+
+        try:
+            df_output = self.shell("df /sdcard")
+            lines = df_output.strip().split("\n")
+            storage_free_mb = 0
+            if len(lines) >= 2:
+                parts = lines[1].split()
+                if len(parts) >= 4:
+                    free_kb = int(parts[3])
+                    storage_free_mb = free_kb // 1024
+        except (IndexError, ValueError):
+            storage_free_mb = 0
+
+        try:
+            wakefulness = self.shell("dumpsys power | grep mWakefulness")
+            screen_locked = "Asleep" in wakefulness
+        except Exception:
+            screen_locked = True
+
+        return {
+            "model": self.shell("getprop ro.product.model").strip(),
+            "android_version": self.shell("getprop ro.build.version.release").strip(),
+            "battery_level": battery_level,
+            "storage_free_mb": storage_free_mb,
+            "screen_locked": screen_locked,
+        }

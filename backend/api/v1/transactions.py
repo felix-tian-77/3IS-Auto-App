@@ -1,13 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from typing import List, Optional
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 from backend.db.database import get_db
 from backend.models.transaction import Transaction, TransactionStatus, BusinessType
+from backend.models.attachment import Attachment
 from backend.services.transaction_service import TransactionService
-from backend.schemas.transaction import TransactionResponse, TransactionCreateRequest
+from backend.schemas.transaction import (
+    TransactionResponse,
+    TransactionCreateRequest,
+    AttachmentsDeliveredRequest,
+    AttachmentsDeliveredResponse,
+)
 import json
 
 class TransactionErrorType(str, Enum):
@@ -143,3 +149,36 @@ async def get_transaction(transaction_id: str, db: AsyncSession = Depends(get_db
         "is_transfer": txn.is_transfer,
         "holder_phone": txn.holder_phone,
     }
+
+
+@router.post(
+    "/transactions/{transaction_id}/attachments-delivered",
+    response_model=AttachmentsDeliveredResponse,
+)
+async def attachments_delivered(
+    transaction_id: str,
+    req: AttachmentsDeliveredRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    txn_result = await db.execute(
+        select(Transaction).where(Transaction.transaction_id == transaction_id)
+    )
+    txn = txn_result.scalar_one_or_none()
+    if txn is None:
+        raise HTTPException(status_code=404, detail="transaction not found")
+
+    for f in req.files:
+        att_result = await db.execute(
+            select(Attachment).where(Attachment.attachment_id == f.attachment_id)
+        )
+        att = att_result.scalar_one_or_none()
+        if att is not None:
+            att.local_path = f.local_path
+
+    txn.status = TransactionStatus.READY.value
+    await db.commit()
+
+    return AttachmentsDeliveredResponse(
+        transaction_id=transaction_id,
+        next_state="READY",
+    )

@@ -41,3 +41,18 @@ class TransactionResponse(BaseModel):
     holder_phone: Optional[str] = None
     attachments: List[AttachmentResponse]
     estimated_wait: Optional[int] = None
+
+
+class DeliveredFile(BaseModel):
+    attachment_id: str = Field(min_length=1)
+    local_path: str = Field(min_length=1)
+
+
+class AttachmentsDeliveredRequest(BaseModel):
+    device_id: str = Field(min_length=1)
+    files: List[DeliveredFile]
+
+
+class AttachmentsDeliveredResponse(BaseModel):
+    transaction_id: str
+    next_state: str
