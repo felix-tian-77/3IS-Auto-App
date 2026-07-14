@@ -41,7 +41,7 @@ class TransactionService:
         self.storage = LocalStorageBackend()
 
     def _generate_id(self, prefix: str) -> str:
-        return f"{prefix}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
+        return f"{prefix}-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
 
     def _validate_required_files(self, request: TransactionCreateRequest, file_types: List[str]) -> None:
         required: set[str] = set()
@@ -64,7 +64,7 @@ class TransactionService:
     async def create_transaction(self, request: TransactionCreateRequest,
                                  files: List[tuple], customer_id: str = "default") -> dict:
         now = datetime.utcnow()
-        transaction_id = self._generate_id("TXN")
+        transaction_id = self._generate_id("T")
 
         file_types = [fm[0].get("file_type") for fm in files]
         self._validate_required_files(request, file_types)
@@ -86,7 +86,7 @@ class TransactionService:
 
         attachments = []
         for idx, (file_meta, file_data) in enumerate(files):
-            attachment_id = self._generate_id("ATT")
+            attachment_id = self._generate_id("A")
             file_md5 = hashlib.md5(file_data).hexdigest()
             file_sha256 = hashlib.sha256(file_data).hexdigest()
             ext = Path(file_meta["filename"]).suffix.lower()

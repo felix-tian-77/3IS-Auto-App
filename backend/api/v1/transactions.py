@@ -39,7 +39,7 @@ async def create_transaction(
     for idx, f in enumerate(files):
         content = await f.read()
         file_meta = txn_data["attachments_meta"][idx] if idx < len(txn_data["attachments_meta"]) else {}
-        attachment_id = f"ATT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{idx:04d}"
+        attachment_id = f"A-{datetime.now().strftime('%Y%m%d')}-{idx:04d}"
         uploaded_ids.append(attachment_id)
         file_data_list.append((
             {
