@@ -24,7 +24,7 @@ class Config:
     WORKER_ID = os.getenv("WORKER_ID")
     TOKEN = os.getenv("WORKER_TOKEN")
     ADB_SERIAL = os.getenv("ADB_SERIAL")
-    HEARTBEAT_INTERVAL = 10  # seconds
+    HEARTBEAT_INTERVAL = 5  # seconds
     DEVICE_SANDBOX_ROOT = os.getenv("DEVICE_SANDBOX_ROOT", "/sdcard/3is/")
     WORKER_TMP_DIR = os.getenv("WORKER_TMP_DIR", os.path.join(os.path.expanduser("~"), ".3is-auto", "tmp"))
     URL_REFRESH_MAX_RETRIES = int(os.getenv("URL_REFRESH_MAX_RETRIES", "2"))
