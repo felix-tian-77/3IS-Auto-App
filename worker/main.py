@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import socket
@@ -21,6 +22,21 @@ def get_fingerprint():
 
 def get_ip_address():
     return socket.gethostbyname(socket.gethostname())
+
+
+def _resolve_script_path(business_type: str) -> str | None:
+    """Look up SCRIPT_MAP for a business type and return an absolute script path,
+    or None if the entry is missing or the path does not exist."""
+    script_rel = config.SCRIPT_MAP.get(business_type)
+    if not script_rel:
+        logger.info("No script mapped for business_type=%s, skipping", business_type)
+        return None
+    scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
+    script_path = os.path.join(scripts_dir, script_rel)
+    if not os.path.isdir(script_path):
+        logger.error("Script directory not found: %s", script_path)
+        return None
+    return script_path
 
 
 class Worker:
@@ -177,6 +193,15 @@ class Worker:
             return False
 
         self.report_attachments_delivered(transaction_id, pushed)
+
+        script_path = _resolve_script_path(txn.get("business_type"))
+        if script_path and self.airtest_executor is not None:
+            logger.info("Running business-type script: %s", script_path)
+            self.airtest_executor.run_script(script_path)
+        elif script_path and self.airtest_executor is None:
+            logger.warning(
+                "Skipping script %s: airtest_executor not initialized", script_path
+            )
 
         logger.info("Dispatch complete for txn %s, ready for Airtest", transaction_id)
         return True
