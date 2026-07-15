@@ -1,4 +1,5 @@
 import os
+import json
 import hashlib
 import logging
 import requests
@@ -90,3 +91,9 @@ class FileDownloader:
         txn_dir = Path(self.tmp_dir) / transaction_id
         if txn_dir.exists():
             shutil.rmtree(txn_dir, ignore_errors=True)
+
+    def save_transaction_meta(self, transaction_id: str, meta: dict) -> None:
+        txn_dir = self._txn_dir(transaction_id)
+        out_path = txn_dir / "transaction_meta.json"
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
