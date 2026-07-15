@@ -1,6 +1,8 @@
+import argparse
+import logging
 from airtest.core.api import connect_device, start_app, stop_app, text, touch, snapshot, sleep
 from airtest.core.error import TargetNotFoundError
-import logging
+from airtest.cli.runner import run_script as _airtest_run_script
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,3 +61,35 @@ class AirtestExecutor:
         """Disconnect from device"""
         if self.device:
             self.device = None
+
+    def run_script(self, script_path: str) -> bool:
+        """Run an Airtest .air script directory.
+
+        Uses airtest.cli.runner.run_script under the hood. Airtest manages its own
+        device connection via auto_setup(), so this method does NOT reuse
+        self.device — it constructs an android:/// URI from self.adb_serial.
+
+        Returns True on clean exit, False on assertion failure (SystemExit 20),
+        other failure (SystemExit -1), or any other exception. Never raises.
+        """
+        args = argparse.Namespace(
+            script=script_path,
+            device=f"android:///{self.adb_serial}",
+            log=True,
+            recording=None,
+            compress=None,
+            no_image=False,
+        )
+        try:
+            _airtest_run_script(args)
+            return True
+        except SystemExit as e:
+            logger.error(
+                "Airtest script %s exited with code %s", script_path, e.code
+            )
+            return False
+        except Exception as e:
+            logger.error(
+                "Airtest script %s raised exception: %s", script_path, e
+            )
+            return False
