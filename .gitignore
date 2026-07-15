@@ -34,3 +34,8 @@ htmlcov/
 .env.local
 *.local
 .gstack/
+
+# Airtest run logs (generated when worker executes .air scripts)
+worker/scripts/*/log/
+worker/scripts/**/log/
+worker/scripts/**/log.txt
