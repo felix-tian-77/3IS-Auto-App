@@ -174,7 +174,7 @@ APP_NAME=3IS-Auto-App
 ```yaml
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18.4-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
