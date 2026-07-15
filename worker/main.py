@@ -161,6 +161,15 @@ class Worker:
             self.file_downloader.cleanup(transaction_id)
             return False
 
+        meta = {
+            "transaction_id": transaction_id,
+            "holder_phone": txn.get("holder_phone"),
+            "business_type": txn.get("business_type"),
+            "tax_exempt": txn.get("tax_exempt", False),
+            "is_transfer": txn.get("is_transfer", False),
+        }
+        self.file_downloader.save_transaction_meta(transaction_id, meta)
+
         pushed = self.device_pusher.push_files(transaction_id, downloaded)
         if not pushed:
             logger.error("Push failed for txn %s", transaction_id)
