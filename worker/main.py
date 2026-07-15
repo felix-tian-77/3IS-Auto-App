@@ -29,13 +29,23 @@ def _resolve_script_path(business_type: str) -> str | None:
     or None if the entry is missing or the path does not exist."""
     script_rel = config.SCRIPT_MAP.get(business_type)
     if not script_rel:
-        logger.info("No script mapped for business_type=%s, skipping", business_type)
+        logger.info(
+            "SCRIPT_MAP has no entry for business_type=%s (current map keys=%s); skipping",
+            business_type, list(config.SCRIPT_MAP.keys()),
+        )
         return None
     scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
     script_path = os.path.join(scripts_dir, script_rel)
     if not os.path.isdir(script_path):
-        logger.error("Script directory not found: %s", script_path)
+        logger.error(
+            "Script directory not found for business_type=%s: %s "
+            "(check SCRIPT_MAP value '%s')",
+            business_type, script_path, script_rel,
+        )
         return None
+    logger.info(
+        "Resolved business_type=%s -> script=%s", business_type, script_path
+    )
     return script_path
 
 
@@ -197,10 +207,21 @@ class Worker:
         script_path = _resolve_script_path(txn.get("business_type"))
         if script_path and self.airtest_executor is not None:
             logger.info("Running business-type script: %s", script_path)
-            self.airtest_executor.run_script(script_path)
+            ok = self.airtest_executor.run_script(script_path)
+            if ok:
+                logger.info("Business-type script completed successfully: %s", script_path)
+            else:
+                logger.error("Business-type script failed: %s", script_path)
         elif script_path and self.airtest_executor is None:
-            logger.warning(
-                "Skipping script %s: airtest_executor not initialized", script_path
+            logger.error(
+                "Skipping script %s: airtest_executor not initialized "
+                "(Worker.run() must complete before dispatch)",
+                script_path,
+            )
+        else:
+            logger.info(
+                "No script will be executed for txn %s (business_type=%s)",
+                transaction_id, txn.get("business_type"),
             )
 
         logger.info("Dispatch complete for txn %s, ready for Airtest", transaction_id)
@@ -234,6 +255,15 @@ class Worker:
 
     def run(self):
         logger.info(f"Worker starting with ADB serial: {self.adb_serial}")
+        logger.info(
+            "Loaded SCRIPT_MAP (env var SCRIPT_MAP): %s", config.SCRIPT_MAP
+        )
+        if not config.SCRIPT_MAP:
+            logger.warning(
+                "SCRIPT_MAP is empty — no business-type scripts will be executed. "
+                "Set SCRIPT_MAP env var (JSON object) to enable. "
+                "Example: SCRIPT_MAP={\"OLD_VEHICLE\": \"renew/renew_01.air\"}"
+            )
 
         if not self.register():
             logger.error("Worker registration failed, exiting")
