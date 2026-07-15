@@ -1,4 +1,8 @@
 import os
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _load_env_file():
     env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -24,5 +28,20 @@ class Config:
     DEVICE_SANDBOX_ROOT = os.getenv("DEVICE_SANDBOX_ROOT", "/sdcard/3is/")
     WORKER_TMP_DIR = os.getenv("WORKER_TMP_DIR", os.path.join(os.path.expanduser("~"), ".3is-auto", "tmp"))
     URL_REFRESH_MAX_RETRIES = int(os.getenv("URL_REFRESH_MAX_RETRIES", "2"))
+
+    @staticmethod
+    def _parse_script_map():
+        raw = os.getenv("SCRIPT_MAP", "{}")
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning("SCRIPT_MAP is not valid JSON (%s); falling back to {}", e)
+            return {}
+        if not isinstance(parsed, dict):
+            logger.warning("SCRIPT_MAP must be a JSON object; got %s; falling back to {}", type(parsed).__name__)
+            return {}
+        return {str(k): str(v) for k, v in parsed.items()}
+
+    SCRIPT_MAP = _parse_script_map()
 
 config = Config()
