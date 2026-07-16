@@ -58,7 +58,7 @@ async def poll_task(worker_id: str, db: AsyncSession = Depends(get_db)):
             "business_type": txn.business_type,
             "flow_id": txn.flow_id,
             "device_id": txn.device_id,
-            "customer_phone_encrypted": txn.customer_phone_encrypted,
+            "customer_phone": txn.customer_phone,
             "customer_id_no_encrypted": txn.customer_id_no_encrypted,
             "retry_count": txn.retry_count,
             "tax_exempt": txn.tax_exempt,

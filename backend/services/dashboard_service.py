@@ -158,7 +158,7 @@ class DashboardService:
                     # so the attribute comes back as a plain str.
                     "business_type": t.business_type,
                     "status": t.status,
-                    "customer_phone_encrypted": t.customer_phone_encrypted,
+                    "customer_phone": t.customer_phone,
                     "duration_ms": t.duration_ms,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
                     "worker": (

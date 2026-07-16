@@ -89,7 +89,7 @@ async def list_transactions(
     conditions = []
     if search:
         search_filter = or_(
-            Transaction.customer_phone_search.contains(search),
+            Transaction.customer_phone.contains(search),
             Transaction.transaction_id.contains(search),
         )
         conditions.append(search_filter)
@@ -116,7 +116,7 @@ async def list_transactions(
             "transaction_id": t.transaction_id,
             "business_type": t.business_type,
             "status": t.status,
-            "customer_phone_encrypted": t.customer_phone_encrypted,
+            "customer_phone": t.customer_phone,
             "retry_count": t.retry_count,
             "tax_exempt": t.tax_exempt,
             "is_transfer": t.is_transfer,
@@ -145,6 +145,7 @@ async def get_transaction(transaction_id: str, db: AsyncSession = Depends(get_db
         "transaction_id": txn.transaction_id,
         "status": txn.status,
         "business_type": txn.business_type,
+        "customer_phone": txn.customer_phone,
         "tax_exempt": txn.tax_exempt,
         "is_transfer": txn.is_transfer,
         "holder_phone": txn.holder_phone,
