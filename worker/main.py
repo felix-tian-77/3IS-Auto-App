@@ -196,6 +196,17 @@ class Worker:
         }
         self.file_downloader.save_transaction_meta(transaction_id, meta)
 
+        # Surface silent regressions: if the poll response did not carry
+        # holder_phone, the airtest script will receive HOLDER_PHONE unset.
+        # Log a warning so backend-driven field loss becomes visible in
+        # operator logs without aborting this transaction's dispatch.
+        if meta.get("holder_phone") is None:
+            logger.warning(
+                "txn %s: holder_phone missing from poll response "
+                "(business_type=%s); Airtest script will see HOLDER_PHONE unset",
+                transaction_id, meta.get("business_type"),
+            )
+
         pushed = self.device_pusher.push_files(transaction_id, downloaded)
         if not pushed:
             logger.error("Push failed for txn %s", transaction_id)
@@ -207,7 +218,7 @@ class Worker:
         script_path = _resolve_script_path(txn.get("business_type"))
         if script_path and self.airtest_executor is not None:
             logger.info("Running business-type script: %s", script_path)
-            ok = self.airtest_executor.run_script(script_path)
+            ok = self.airtest_executor.run_script(script_path, transaction_meta=meta)
             if ok:
                 logger.info("Business-type script completed successfully: %s", script_path)
             else:
