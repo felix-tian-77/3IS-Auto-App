@@ -52,7 +52,7 @@ export default function TrackApplications() {
     },
     {
       title: '手机号码',
-      dataIndex: 'customer_phone_encrypted',
+      dataIndex: 'customer_phone',
       width: 140,
       render: (phone: string) => maskPhone(phone),
     },

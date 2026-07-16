@@ -21,7 +21,7 @@ export interface Transaction {
   external_id?: string;
   business_type: BusinessType;
   status: TransactionStatus;
-  customer_phone_encrypted?: string;
+  customer_phone?: string;
   customer_id_no_encrypted?: string;
   submitted_by?: string;
   flow_id?: string;

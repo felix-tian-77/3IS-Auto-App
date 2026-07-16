@@ -85,7 +85,7 @@ export default function ApplicationDetail() {
             {txn.transaction_id}
           </Descriptions.Item>
           <Descriptions.Item label="手机号码">
-            {maskPhone(txn.customer_phone_encrypted)}
+            {maskPhone(txn.customer_phone)}
           </Descriptions.Item>
           <Descriptions.Item label="业务类型">
             {BUSINESS_TYPE_MAP[txn.business_type] || txn.business_type}

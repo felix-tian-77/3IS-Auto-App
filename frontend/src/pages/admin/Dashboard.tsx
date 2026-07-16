@@ -26,7 +26,7 @@ export default function Dashboard() {
 
   const recentColumns = [
     { title: '申请编号', dataIndex: 'transaction_id', width: 180, render: (id: string) => <a onClick={() => navigate(`/staff/detail/${id}`)}>{id}</a> },
-    { title: '手机号', dataIndex: 'customer_phone_encrypted', width: 130, render: (p: string) => maskPhone(p) },
+    { title: '手机号', dataIndex: 'customer_phone', width: 130, render: (p: string) => maskPhone(p) },
     { title: '类型', dataIndex: 'business_type', width: 80, render: (t: string) => BUSINESS_TYPE_MAP[t] || t },
     { title: '状态', dataIndex: 'status', width: 100, render: (s: TransactionStatus) => <StatusBadge status={s} /> },
     { title: '处理设备', dataIndex: 'worker', width: 120, render: (w: { hostname?: string } | undefined) => w?.hostname || '--' },
