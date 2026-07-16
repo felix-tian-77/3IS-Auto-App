@@ -25,8 +25,7 @@ async def test_list_transactions_pagination(db_engine, db_session):
             transaction_id=f"TXN-test-{i:03d}",
             business_type=BusinessType.NEW,
             status=TransactionStatus.PENDING,
-            customer_phone_encrypted="enc",
-            customer_phone_search="13800000000",
+            customer_phone="13800000000",
             created_at=now,
         ))
     await db_session.commit()
@@ -67,16 +66,14 @@ async def test_list_transactions_phone_search(db_engine, db_session):
             transaction_id="TXN-phone-a",
             business_type=BusinessType.NEW,
             status=TransactionStatus.PENDING,
-            customer_phone_encrypted="enc-a",
-            customer_phone_search="13812345678",
+            customer_phone="13812345678",
             created_at=now,
         ),
         Transaction(
             transaction_id="TXN-phone-b",
             business_type=BusinessType.NEW,
             status=TransactionStatus.PENDING,
-            customer_phone_encrypted="enc-b",
-            customer_phone_search="13987654321",
+            customer_phone="13987654321",
             created_at=now,
         ),
     ])
@@ -118,14 +115,14 @@ async def test_list_transactions_id_search(db_engine, db_session):
             transaction_id="TXN-20260609-001",
             business_type=BusinessType.NEW,
             status=TransactionStatus.PENDING,
-            customer_phone_search="13800000001",
+            customer_phone="13800000001",
             created_at=now,
         ),
         Transaction(
             transaction_id="TXN-20260609-002",
             business_type=BusinessType.NEW,
             status=TransactionStatus.PENDING,
-            customer_phone_search="13800000002",
+            customer_phone="13800000002",
             created_at=now,
         ),
     ])
