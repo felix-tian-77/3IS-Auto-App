@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 _META_TO_ENV = {
     "transaction_id": "TRANSACTION_ID",
     "holder_phone":   "HOLDER_PHONE",
+    "customer_phone": "CUSTOMER_PHONE",
     "business_type":  "BUSINESS_TYPE",
     "tax_exempt":     "TAX_EXEMPT",
     "is_transfer":    "IS_TRANSFER",
@@ -83,9 +84,10 @@ class AirtestExecutor:
         device connection via auto_setup(), so this method does NOT reuse
         self.device — it constructs an android:/// URI from self.adb_serial.
 
-        If ``transaction_meta`` is provided, the 5 known keys are injected into
+        If ``transaction_meta`` is provided, the 6 known keys are injected into
         ``os.environ`` for the duration of the airtest call so the .air script
-        reads them via ``os.environ.get("HOLDER_PHONE")`` etc., and then
+        reads them via ``os.environ.get("HOLDER_PHONE")``,
+        ``os.environ.get("CUSTOMER_PHONE")`` etc., and then
         restored to their pre-call state via ``try/finally``.
 
         Per-field behavior inside the ``transaction_meta`` dict:
