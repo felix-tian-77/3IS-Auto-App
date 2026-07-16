@@ -10,8 +10,18 @@ auto_setup(__file__)
 from poco.drivers.android.uiautomation import AndroidUiautomationPoco
 poco = AndroidUiautomationPoco(use_airtest_input=True, screenshot_each_action=False)
 
+import os
 
-mobile_phone = "19110898582"
+# ---- Parameters (injected by Worker via environment variables) ----
+transaction_id = os.environ.get("TRANSACTION_ID")
+holder_phone   = os.environ.get("HOLDER_PHONE")
+customer_phone = os.environ.get("CUSTOMER_PHONE")
+business_type  = os.environ.get("BUSINESS_TYPE")
+tax_exempt     = os.environ.get("TAX_EXEMPT", "false").lower() == "true"
+is_transfer    = os.environ.get("IS_TRANSFER", "false").lower() == "true"
+
+# 手机号 fallback：优先客户手机号，其次被保险人手机号，最后测试默认值
+mobile_phone = customer_phone or holder_phone or "19110898582"
 
 poco("畅销宝").click()
 poco("车险").wait_for_appearance(timeout=10)
@@ -93,7 +103,7 @@ poco(text="02.jpg").click()
 
 #输入手机号
 
-poco("android.widget.FrameLayout").offspring("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[9].child("android.view.View").child("android.view.View").child("android.view.View")[1].child("android.view.View").child("android.view.View").child("android.view.View").offspring("android.widget.EditText").set_text("19110898582")
+poco("android.widget.FrameLayout").offspring("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[9].child("android.view.View").child("android.view.View").child("android.view.View")[1].child("android.view.View").child("android.view.View").child("android.view.View").offspring("android.widget.EditText").set_text(mobile_phone)
 
 
 
