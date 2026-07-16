@@ -249,3 +249,35 @@ def test_run_script_restores_env_after_exception_with_meta(monkeypatch):
     assert seen["HOLDER_PHONE"] == "13800138000"
     assert os.environ.get("HOLDER_PHONE") == "old"
     assert "BUSINESS_TYPE" not in os.environ
+
+
+def test_run_script_pops_stale_env_for_none_meta_value(monkeypatch):
+    """If meta has holder_phone=None AND os.environ has a stale value, the stale
+    value is hidden during execution and restored after."""
+    monkeypatch.setenv("HOLDER_PHONE", "stale_phone")
+    monkeypatch.delenv("BUSINESS_TYPE", raising=False)
+    ex = _make_executor()
+
+    seen_during_call = {}
+
+    def fake_run_script(args, testcase_cls=None):
+        # Capture what the airtest process would have seen at execution time.
+        seen_during_call["HOLDER_PHONE"] = os.environ.get("HOLDER_PHONE")
+        seen_during_call["BUSINESS_TYPE"] = os.environ.get("BUSINESS_TYPE")
+
+    with patch("worker.airtest_executor._airtest_run_script", fake_run_script):
+        ok = ex.run_script(
+            "/tmp/fake.air",
+            transaction_meta={"holder_phone": None, "business_type": "NEW_VEHICLE"},
+        )
+
+    assert ok is True
+    # Stale value MUST be hidden during execution.
+    assert seen_during_call["HOLDER_PHONE"] is None, (
+        f"stale HOLDER_PHONE must be popped when meta['holder_phone'] is None; "
+        f"saw {seen_during_call['HOLDER_PHONE']!r}"
+    )
+    # Truthy meta field is visible as before.
+    assert seen_during_call["BUSINESS_TYPE"] == "NEW_VEHICLE"
+    # After the call, the stale value MUST be restored.
+    assert os.environ.get("HOLDER_PHONE") == "stale_phone"
