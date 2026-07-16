@@ -84,15 +84,18 @@ class AirtestExecutor:
         self.device — it constructs an android:/// URI from self.adb_serial.
 
         If ``transaction_meta`` is provided, the 5 known keys are injected into
-        ``os.environ`` for the duration of the airtest call so that the .air
-        script can read them via ``os.environ.get("HOLDER_PHONE")`` etc., then
-        restored to their pre-call values via ``try/finally`` (so the keys are
-        removed if they didn't previously exist, or set back to their old
-        values if they did).
+        ``os.environ`` for the duration of the airtest call so the .air script
+        reads them via ``os.environ.get("HOLDER_PHONE")`` etc., and then
+        restored to their pre-call state via ``try/finally``.
 
-        Values that are ``None`` in ``transaction_meta`` are NOT written to
-        ``os.environ`` (the key is left absent). Booleans are encoded as the
-        lower-case strings ``"true"`` / ``"false"``.
+        Per-field behavior inside the ``transaction_meta`` dict:
+          - ``None`` value → the env key is ``pop()``'d for the duration of the
+            call (so a stale pre-existing value cannot leak into the script)
+            and the prior value (if any) is restored after.
+          - ``bool`` → encoded as lowercase ``"true"`` / ``"false"``.
+          - Anything else → ``str(value)``.
+
+        ``transaction_meta=None`` → no env management at all (true backward-compat).
 
         Returns True on clean exit, False on assertion failure (SystemExit 20),
         other failure (SystemExit -1), or any other exception. Never raises.
@@ -106,37 +109,53 @@ class AirtestExecutor:
             no_image=False,
         )
 
-        env_snapshot = {k: os.environ.get(k) for k in _ENV_KEYS}
-
+        # Snapshot only when we will mutate, so transaction_meta=None is a true no-op.
+        env_snapshot = None
         if transaction_meta is not None:
-            for key_in_meta, key_in_env in _META_TO_ENV.items():
-                value = transaction_meta.get(key_in_meta)
-                if value is None:
-                    # Leave os.environ untouched for None values (don't pop,
-                    # don't write empty string). The script will see "key
-                    # absent" → os.environ.get(...) is None.
-                    continue
-                if isinstance(value, bool):
-                    os.environ[key_in_env] = "true" if value else "false"
-                else:
-                    os.environ[key_in_env] = str(value)
+            env_snapshot = {k: os.environ.get(k) for k in _ENV_KEYS}
+            try:
+                for key_in_meta, key_in_env in _META_TO_ENV.items():
+                    value = transaction_meta.get(key_in_meta)
+                    if value is None:
+                        # Pop stale env values so the airtest reads "key absent"
+                        # (os.environ.get(...) returns None) regardless of whether
+                        # the key existed before the call.
+                        env_snapshot[key_in_env] = os.environ.pop(key_in_env, None)
+                        continue
+                    if isinstance(value, bool):
+                        os.environ[key_in_env] = "true" if value else "false"
+                    else:
+                        os.environ[key_in_env] = str(value)
 
-        try:
-            _airtest_run_script(args)
-            return True
-        except SystemExit as e:
-            logger.error(
-                "Airtest script %s exited with code %s", script_path, e.code
-            )
-            return False
-        except Exception as e:
-            logger.error(
-                "Airtest script %s raised exception: %s", script_path, e
-            )
-            return False
-        finally:
-            for key_in_env, prior_value in env_snapshot.items():
-                if prior_value is None:
-                    os.environ.pop(key_in_env, None)
-                else:
-                    os.environ[key_in_env] = prior_value
+                _airtest_run_script(args)
+                return True
+            except SystemExit as e:
+                logger.error(
+                    "Airtest script %s exited with code %s", script_path, e.code
+                )
+                return False
+            except Exception as e:
+                logger.error(
+                    "Airtest script %s raised exception: %s", script_path, e
+                )
+                return False
+            finally:
+                for key_in_env, prior_value in env_snapshot.items():
+                    if prior_value is None:
+                        os.environ.pop(key_in_env, None)
+                    else:
+                        os.environ[key_in_env] = prior_value
+        else:
+            try:
+                _airtest_run_script(args)
+                return True
+            except SystemExit as e:
+                logger.error(
+                    "Airtest script %s exited with code %s", script_path, e.code
+                )
+                return False
+            except Exception as e:
+                logger.error(
+                    "Airtest script %s raised exception: %s", script_path, e
+                )
+                return False

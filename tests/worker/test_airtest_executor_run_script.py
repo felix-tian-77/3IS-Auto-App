@@ -203,3 +203,49 @@ def test_run_script_skips_none_meta_values():
     assert snapshot_during_call["BUSINESS_TYPE"] == "NEW_VEHICLE"
     # After the call, the helper restored the snapshot — absent keys stay absent.
     assert "HOLDER_PHONE" not in os.environ
+
+
+def test_run_script_restores_env_after_systemexit_with_meta(monkeypatch):
+    """If airtest raises SystemExit, the injected env var was visible AND was restored after."""
+    monkeypatch.setenv("HOLDER_PHONE", "old")
+    ex = _make_executor()
+
+    seen = {}
+
+    def fake_run_script(args, testcase_cls=None):
+        # Capture what the airtest process would have seen.
+        seen["HOLDER_PHONE"] = os.environ.get("HOLDER_PHONE")
+        raise SystemExit(20)
+
+    with patch("worker.airtest_executor._airtest_run_script", fake_run_script):
+        ok = ex.run_script("/tmp/fake.air", transaction_meta={"holder_phone": "new"})
+
+    assert ok is False
+    # During execution the injected value was visible.
+    assert seen["HOLDER_PHONE"] == "new"
+    # After the call, the prior value is restored.
+    assert os.environ.get("HOLDER_PHONE") == "old"
+
+
+def test_run_script_restores_env_after_exception_with_meta(monkeypatch):
+    """If airtest raises a regular Exception, the injected env var was visible AND was restored after."""
+    monkeypatch.setenv("HOLDER_PHONE", "old")
+    monkeypatch.delenv("BUSINESS_TYPE", raising=False)
+    ex = _make_executor()
+
+    seen = {}
+
+    def fake_run_script(args, testcase_cls=None):
+        seen["HOLDER_PHONE"] = os.environ.get("HOLDER_PHONE")
+        raise RuntimeError("boom")
+
+    with patch("worker.airtest_executor._airtest_run_script", fake_run_script):
+        ok = ex.run_script(
+            "/tmp/fake.air",
+            transaction_meta={"holder_phone": "13800138000", "business_type": "X"},
+        )
+
+    assert ok is False
+    assert seen["HOLDER_PHONE"] == "13800138000"
+    assert os.environ.get("HOLDER_PHONE") == "old"
+    assert "BUSINESS_TYPE" not in os.environ
