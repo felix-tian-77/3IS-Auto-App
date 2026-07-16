@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -157,3 +158,24 @@ def test_cleanup_removes_transaction_dir(tmp_path):
     downloader.cleanup("TXN-CLEAN")
 
     assert not txn_dir.exists()
+
+
+def test_save_transaction_meta_writes_customer_phone(tmp_path):
+    """save_transaction_meta persists customer_phone into the JSON file."""
+    downloader = FileDownloader(str(tmp_path))
+    downloader.save_transaction_meta(
+        "T-1",
+        {
+            "transaction_id": "T-1",
+            "holder_phone": "13800138000",
+            "customer_phone": "13900139000",
+            "business_type": "NEW_VEHICLE",
+            "tax_exempt": False,
+            "is_transfer": False,
+        },
+    )
+    meta_path = tmp_path / "T-1" / "transaction_meta.json"
+    with open(meta_path, encoding="utf-8") as f:
+        data = json.load(f)
+    assert data["customer_phone"] == "13900139000"
+    assert data["holder_phone"] == "13800138000"

@@ -190,6 +190,7 @@ class Worker:
         meta = {
             "transaction_id": transaction_id,
             "holder_phone": txn.get("holder_phone"),
+            "customer_phone": txn.get("customer_phone"),
             "business_type": txn.get("business_type"),
             "tax_exempt": txn.get("tax_exempt", False),
             "is_transfer": txn.get("is_transfer", False),
@@ -204,6 +205,13 @@ class Worker:
             logger.warning(
                 "txn %s: holder_phone missing from poll response "
                 "(business_type=%s); Airtest script will see HOLDER_PHONE unset",
+                transaction_id, meta.get("business_type"),
+            )
+
+        if meta.get("customer_phone") is None:
+            logger.warning(
+                "txn %s: customer_phone missing from poll response "
+                "(business_type=%s); Airtest script will see CUSTOMER_PHONE unset",
                 transaction_id, meta.get("business_type"),
             )
 
