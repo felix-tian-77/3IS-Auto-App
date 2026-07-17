@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -8,6 +9,7 @@ logger = logging.getLogger(__name__)
 class PushedFile:
     attachment_id: str
     local_path: str
+    filename: str = ""
 
 
 class DevicePusher:
@@ -23,12 +25,13 @@ class DevicePusher:
         for df in downloaded_files:
             if not df.md5_ok:
                 continue
-            ext = self._extract_ext(df.local_path)
-            remote_path = f"{txn_dir}/{df.attachment_id}.{ext}"
+            filename = df.filename or Path(df.local_path).name
+            remote_path = f"{txn_dir}/{filename}"
             self.device_controller.push_file(df.local_path, remote_path)
             pushed.append(PushedFile(
                 attachment_id=df.attachment_id,
                 local_path=remote_path,
+                filename=filename,
             ))
             logger.info("Pushed %s -> %s", df.attachment_id, remote_path)
         return pushed
@@ -37,9 +40,3 @@ class DevicePusher:
         txn_dir = f"{self.sandbox_root}/{transaction_id}"
         self.device_controller.shell(f"rm -rf {txn_dir}")
         logger.info("Cleaned device sandbox: %s", txn_dir)
-
-    @staticmethod
-    def _extract_ext(local_path: str) -> str:
-        import os
-        _, ext = os.path.splitext(local_path)
-        return ext.lstrip(".") if ext else "bin"

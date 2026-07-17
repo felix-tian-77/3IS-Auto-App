@@ -635,12 +635,14 @@ android/
 
 **设备端沙箱(Android 设备 `/sdcard/3is/`):**
 
-- 根目录:`/sdcard/3is/`(Device 内部约定,**不再**使用事务级 `/sdcard/sandbox/{txn_id}/`)
-- 文件命名规则:`<attachment_id>.<ext>`,例如 `att_a1b2c3d4.jpg` / `att_e5f6g7h8.pdf`
-- `attachment_id` 由 Backend 在 `POST /api/v1/transactions` 响应中下发,通过 `DOWNLOAD_FILES` 指令传给 Device
-- `ext` 取 `jpg|png|pdf` 三者之一(在 `download_urls[]` 元素中显式携带,见 §7.6 协议)
-- 写入路径:由 `SandboxManager.pathFor(attachmentId, ext)` 拼装,先写 `<attachment_id>.<ext>.part` 再原子 rename
-- 事务终态后由 Worker 触发 `adb shell rm -rf /sdcard/3is/` 清理(`download-ack` 上报完成后)
+- 根目录:`/sdcard/3is/`
+- 事务目录:`/sdcard/3is/{transaction_id}/`
+- 文件命名规则:使用 Backend 下载 URL 元数据中的 `filename`，该值等于 Backend 存储路径的 basename，例如 `ID_CARD_FRONT.jpg` / `CERTIFICATE.pdf`
+- `attachment_id` 仅用于附件关联和交付回报，不参与设备文件名生成
+- Worker 临时文件路径:`{WORKER_TMP_DIR}/{transaction_id}/{filename}`，先写 `{filename}.part`，校验 MD5 后原子改名
+- Worker 推送路径:`/sdcard/3is/{transaction_id}/{filename}`，交付回报中的 `local_path` 与该路径一致
+- `download_urls[]` 元素必须携带 `filename`、`attachment_id`、`md5` 和下载 URL
+- 事务清理时按事务目录删除，不删除其他事务的文件
 
 > **关于跨 APP 可读:** `/sdcard/3is/` 位于外部存储共享区,默认对其它 APP 可见,这是**本工具明确选择的例外**(目标保险 APP 需直接读取该目录下的影像文件),**不是**通用沙箱策略。其他模块应继续使用 APP 私有目录(`context.filesDir`)做隔离。
 
@@ -1046,14 +1048,14 @@ uv run --project backend python scripts/test_integration.py
 - [PRD 设计文档](./superpowers/specs/2026-06-05-prd-design.md) - 产品需求说明书
 - [架构设计](./superpowers/specs/) - 详细架构文档
 
-### 10.4 端到端测试(mock_worker)
+### 10.4 历史端到端测试(mock_worker)
 
-在没有真实 Backend 业务事务的情况下,可以使用 `android/scripts/mock_worker.py` 验证 Device Agent 的下载/校验/回送 ack 链路。
+> 本节描述历史 Device Agent 的 mock 流程。当前 Worker 端到端文件契约以 §5.6 为准：设备文件位于 `/sdcard/3is/{transaction_id}/`，文件名使用 Backend 下载 URL 元数据中的 `filename`。
 
 #### 适用场景
 
 - 调试 Device Agent 而不想拉起整个 Backend/Worker 链路
-- 验证下载后文件落在 `/sdcard/3is/` 的正确位置
+- 验证下载后文件落在 `/sdcard/3is/{transaction_id}/` 的正确位置
 - 验证 MD5 校验失败、URL 404 等错误路径
 
 #### 步骤
@@ -1084,8 +1086,8 @@ uv run --project backend python scripts/test_integration.py
 
 4. **设备端验证**(在连接的 Android 设备 / 模拟器):
    ```bash
-   adb shell ls -la /sdcard/3is/
-   # 预期: att_mock0001.jpg,大小 9 字节("hello-3is")
+    adb shell ls -la /sdcard/3is/TXN-MOCK-0001/
+    # 预期: Backend filename 对应的文件,例如 ID_CARD_FRONT.jpg,大小 9 字节("hello-3is")
    ```
 
 #### 错误路径注入

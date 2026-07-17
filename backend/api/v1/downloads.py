@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
+from pathlib import Path
 import time
 import uuid
 from backend.db.database import get_db
@@ -18,13 +19,20 @@ url_service = URLSignatureService()
 
 @router.post("/transactions/{transaction_id}/download-urls")
 async def generate_download_urls(transaction_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    dispatcher = DispatcherService(db)
-    assignment = await dispatcher.assign_transaction(transaction_id)
-
     result = await db.execute(
         select(Attachment).where(Attachment.transaction_id == transaction_id)
     )
     attachments = result.scalars().all()
+
+    for att in attachments:
+        if not att.storage_path:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Attachment {att.attachment_id} has no storage path",
+            )
+
+    dispatcher = DispatcherService(db)
+    assignment = await dispatcher.assign_transaction(transaction_id)
 
     base = f"{request.url.scheme}://{request.url.netloc}"
     download_urls = []
@@ -60,6 +68,7 @@ async def generate_download_urls(transaction_id: str, request: Request, db: Asyn
             "url": signed_url,
             "md5": att.md5,
             "sha256": att.sha256,
+            "filename": Path(att.storage_path).name if att.storage_path else "",
             "expires_at": datetime.fromtimestamp(expires_at).isoformat(),
             "storage_backend": "local",
         })

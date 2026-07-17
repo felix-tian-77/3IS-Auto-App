@@ -42,7 +42,7 @@ async def test_attachments_delivered_persists_local_path_and_sets_ready(
                     "files": [
                         {
                             "attachment_id": "att_delivered_01",
-                            "local_path": "/sdcard/3is/TXN-DELIVERED-0001/att_delivered_01.jpg",
+                            "local_path": "/sdcard/3is/TXN-DELIVERED-0001/ID_CARD_FRONT.jpg",
                         }
                     ],
                 },
@@ -56,7 +56,7 @@ async def test_attachments_delivered_persists_local_path_and_sets_ready(
             att = (await verify.execute(
                 select(Attachment).where(Attachment.attachment_id == "att_delivered_01")
             )).scalar_one()
-            assert att.local_path == "/sdcard/3is/TXN-DELIVERED-0001/att_delivered_01.jpg"
+            assert att.local_path == "/sdcard/3is/TXN-DELIVERED-0001/ID_CARD_FRONT.jpg"
 
             txn = (await verify.execute(
                 select(Transaction).where(Transaction.transaction_id == "TXN-DELIVERED-0001")

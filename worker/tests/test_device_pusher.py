@@ -16,20 +16,28 @@ def test_push_files_creates_transaction_subdir(tmp_path):
     ctrl = _mock_controller()
     pusher = DevicePusher(ctrl, sandbox_root="/sdcard/3is/")
 
-    local_file = tmp_path / "att_001.jpg"
+    local_file = tmp_path / "ID_CARD_FRONT.jpg"
     local_file.write_bytes(b"data")
 
     downloaded = [
-        DownloadedFile(attachment_id="att_001", local_path=str(local_file), md5_ok=True),
+        DownloadedFile(
+            attachment_id="att_001",
+            local_path=str(local_file),
+            md5_ok=True,
+            filename="ID_CARD_FRONT.jpg",
+        ),
     ]
 
     results = pusher.push_files("TXN-100", downloaded)
 
     ctrl.shell.assert_any_call("mkdir -p /sdcard/3is/TXN-100")
-    ctrl.push_file.assert_called_once_with(str(local_file), "/sdcard/3is/TXN-100/att_001.jpg")
+    ctrl.push_file.assert_called_once_with(
+        str(local_file), "/sdcard/3is/TXN-100/ID_CARD_FRONT.jpg"
+    )
     assert len(results) == 1
     assert results[0].attachment_id == "att_001"
-    assert results[0].local_path == "/sdcard/3is/TXN-100/att_001.jpg"
+    assert results[0].filename == "ID_CARD_FRONT.jpg"
+    assert results[0].local_path == "/sdcard/3is/TXN-100/ID_CARD_FRONT.jpg"
 
 
 def test_push_files_skips_md5_failed(tmp_path):
@@ -73,7 +81,7 @@ def test_push_files_preserves_extension(tmp_path):
     assert results[0].local_path.endswith(".pdf")
 
 
-def test_push_files_no_extension_defaults_bin(tmp_path):
+def test_push_files_preserves_filename_without_extension(tmp_path):
     ctrl = _mock_controller()
     pusher = DevicePusher(ctrl)
 
@@ -81,9 +89,15 @@ def test_push_files_no_extension_defaults_bin(tmp_path):
     local_noext.write_bytes(b"data")
 
     downloaded = [
-        DownloadedFile(attachment_id="att_noext", local_path=str(local_noext), md5_ok=True),
+        DownloadedFile(
+            attachment_id="att_noext",
+            local_path=str(local_noext),
+            md5_ok=True,
+            filename="noext",
+        ),
     ]
 
     results = pusher.push_files("TXN-500", downloaded)
 
-    assert results[0].local_path.endswith(".bin")
+    assert results[0].filename == "noext"
+    assert results[0].local_path == "/sdcard/3is/TXN-500/noext"

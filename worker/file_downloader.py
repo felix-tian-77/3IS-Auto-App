@@ -18,6 +18,7 @@ class DownloadedFile:
     attachment_id: str
     local_path: str
     md5_ok: bool
+    filename: str = ""
 
 
 class FileDownloader:
@@ -38,11 +39,30 @@ class FileDownloader:
                 buf = f.read(8192)
         return digest.hexdigest().lower() == expected_md5.lower()
 
+    @staticmethod
+    def _validate_filename(filename: str) -> None:
+        if (
+            not isinstance(filename, str)
+            or not filename.strip()
+            or filename in {".", ".."}
+            or "\x00" in filename
+            or Path(filename).is_absolute()
+            or Path(filename).name != filename
+            or "/" in filename
+            or "\\" in filename
+        ):
+            raise ValueError(f"Invalid attachment filename: {filename!r}")
+
     def download(self, url: str, attachment_id: str, transaction_id: str,
-                 expected_md5: str, ext: str) -> DownloadedFile:
+                 expected_md5: str, ext: str = "", filename: str | None = None) -> DownloadedFile:
+        if filename is None:
+            suffix = ext.lstrip(".")
+            filename = f"{attachment_id}.{suffix}" if suffix else attachment_id
+        self._validate_filename(filename)
+
         txn_dir = self._txn_dir(transaction_id)
-        part_path = txn_dir / f"{attachment_id}.{ext}.part"
-        final_path = txn_dir / f"{attachment_id}.{ext}"
+        part_path = txn_dir / f"{filename}.part"
+        final_path = txn_dir / filename
 
         resp = requests.get(url, stream=True, timeout=30)
         if resp.status_code in (403, 410):
@@ -63,6 +83,7 @@ class FileDownloader:
                 attachment_id=attachment_id,
                 local_path=str(final_path),
                 md5_ok=False,
+                filename=filename,
             )
 
         part_path.replace(final_path)
@@ -70,6 +91,7 @@ class FileDownloader:
             attachment_id=attachment_id,
             local_path=str(final_path),
             md5_ok=True,
+            filename=filename,
         )
 
     def download_all(self, signed_urls: list, transaction_id: str) -> list:
@@ -79,8 +101,33 @@ class FileDownloader:
             url = item["url"]
             md5 = item.get("md5", "")
             ext = item.get("file_format", "").lower() or item.get("ext", "")
+            filename = item["filename"] if "filename" in item else None
 
-            result = self.download(url, att_id, transaction_id, md5, ext)
+            try:
+                result = self.download(
+                    url,
+                    att_id,
+                    transaction_id,
+                    md5,
+                    ext=ext,
+                    filename=filename,
+                )
+            except ValueError as exc:
+                legacy_suffix = ext.lstrip(".")
+                if filename is None:
+                    failed_filename = (
+                        f"{att_id}.{legacy_suffix}" if legacy_suffix else att_id
+                    )
+                else:
+                    failed_filename = ""
+                logger.error("Invalid filename for attachment %s: %s", att_id, exc)
+                result = DownloadedFile(
+                    attachment_id=att_id,
+                    local_path="",
+                    md5_ok=False,
+                    filename=failed_filename,
+                )
+
             results.append(result)
             if not result.md5_ok:
                 break

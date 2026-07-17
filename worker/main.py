@@ -152,6 +152,21 @@ class Worker:
             logger.error("attachments-delivered error: %s", e)
         return False
 
+    @staticmethod
+    def _build_download_item(item: dict, url_entry: dict) -> dict:
+        combined_item = {
+            "attachment_id": item["attachment_id"],
+            "url": url_entry["url"],
+            "md5": item.get("md5", ""),
+            "file_format": item.get("file_format", ""),
+        }
+        filename = url_entry.get("filename")
+        if filename is None:
+            filename = item.get("filename")
+        if filename is not None:
+            combined_item["filename"] = filename
+        return combined_item
+
     def dispatch_to_device(self, task: dict) -> bool:
         if not task.get("task"):
             return False
@@ -174,12 +189,7 @@ class Worker:
                     att["attachment_id"], transaction_id,
                 )
                 return False
-            combined.append({
-                "attachment_id": att["attachment_id"],
-                "url": url_entry["url"],
-                "md5": att.get("md5", ""),
-                "file_format": att.get("file_format", ""),
-            })
+            combined.append(self._build_download_item(att, url_entry))
 
         downloaded = self._download_with_refresh(combined, transaction_id)
         if not downloaded or not all(d.md5_ok for d in downloaded):
@@ -260,16 +270,23 @@ class Worker:
                 if not refreshed_urls:
                     return []
                 url_by_id = {u["attachment_id"]: u for u in refreshed_urls}
+                previous_combined = combined
+                missing_ids = [
+                    item["attachment_id"]
+                    for item in previous_combined
+                    if item["attachment_id"] not in url_by_id
+                ]
+                if missing_ids:
+                    logger.error(
+                        "Missing refreshed URLs for attachments: %s",
+                        missing_ids,
+                    )
+                    return []
                 combined = []
-                for item in combined:
+                for item in previous_combined:
                     url_entry = url_by_id.get(item["attachment_id"])
                     if url_entry:
-                        combined.append({
-                            "attachment_id": item["attachment_id"],
-                            "url": url_entry["url"],
-                            "md5": item["md5"],
-                            "file_format": item["file_format"],
-                        })
+                        combined.append(self._build_download_item(item, url_entry))
         return []
 
     def run(self):
