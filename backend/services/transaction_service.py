@@ -10,6 +10,7 @@ from backend.models.attachment import Attachment, FileType
 from backend.schemas.transaction import TransactionCreateRequest
 from backend.storage.local import LocalStorageBackend
 from backend.services.dispatcher_service import DispatcherService
+from backend.services.image_convert import png_to_jpeg_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -86,14 +87,27 @@ class TransactionService:
         attachments = []
         for idx, (file_meta, file_data) in enumerate(files):
             attachment_id = self._generate_id("A")
-            file_md5 = hashlib.md5(file_data).hexdigest()
-            file_sha256 = hashlib.sha256(file_data).hexdigest()
             ext = Path(file_meta["filename"]).suffix.lower()
             file_type = file_meta["file_type"]
+            file_format = file_meta["file_format"]
+            content_type = file_meta["content_type"]
+            data = file_data
+
+            if ext == ".png":
+                converted = png_to_jpeg_bytes(file_data)
+                if converted is None:
+                    raise ValueError(f"PNG conversion failed for {file_type}")
+                data = converted
+                ext = ".jpg"
+                file_format = "JPG"
+                content_type = "image/jpeg"
+
+            file_md5 = hashlib.md5(data).hexdigest()
+            file_sha256 = hashlib.sha256(data).hexdigest()
             filename = f"{file_type}{ext}"
             storage_key = f"{transaction_id}/{filename}"
 
-            await self.storage.put(storage_key, file_data, file_meta["content_type"])
+            await self.storage.put(storage_key, data, content_type)
 
             attachment = Attachment(
                 attachment_id=attachment_id,
@@ -101,8 +115,8 @@ class TransactionService:
                 customer_id=customer_id,
                 file_type=file_type,
                 description=file_meta.get("description"),
-                file_format=file_meta["file_format"],
-                file_size=len(file_data),
+                file_format=file_format,
+                file_size=len(data),
                 storage_backend="local",
                 storage_path=storage_key,
                 md5=file_md5,
@@ -147,6 +161,7 @@ class TransactionService:
                 {
                     "attachment_id": a.attachment_id,
                     "file_type": a.file_type,
+                    "file_format": a.file_format,
                     "description": a.description,
                     "file_size": a.file_size,
                     "md5": a.md5,

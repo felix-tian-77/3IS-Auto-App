@@ -638,6 +638,7 @@ android/
 - 根目录:`/sdcard/3is/`
 - 事务目录:`/sdcard/3is/{transaction_id}/`
 - 文件命名规则:使用 Backend 下载 URL 元数据中的 `filename`，该值等于 Backend 存储路径的 basename，例如 `ID_CARD_FRONT.jpg` / `CERTIFICATE.pdf`
+- **图片格式归一化**:上传的 PNG 图片会在 Backend 落盘前自动转换为 JPEG 格式存储，存储文件名后缀统一为 `.jpg`，`attachments.file_format` 同步标记为 `JPG`；JPG 与 PDF 附件原样保存
 - `attachment_id` 仅用于附件关联和交付回报，不参与设备文件名生成
 - Worker 临时文件路径:`{WORKER_TMP_DIR}/{transaction_id}/{filename}`，先写 `{filename}.part`，校验 MD5 后原子改名
 - Worker 推送路径:`/sdcard/3is/{transaction_id}/{filename}`，交付回报中的 `local_path` 与该路径一致

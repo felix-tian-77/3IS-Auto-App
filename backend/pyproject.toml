@@ -18,6 +18,7 @@ dependencies = [
     "alembic==1.18.4",
     "httpx==0.28.1",
     "aiofiles==25.1.0",
+    "Pillow>=11.2",
 ]
 
 [dependency-groups]

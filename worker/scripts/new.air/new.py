@@ -10,6 +10,8 @@ from poco.drivers.android.uiautomation import AndroidUiautomationPoco
 poco = AndroidUiautomationPoco(use_airtest_input=True, screenshot_each_action=False)
 
 
+mobile_phone = "18922380659"
+
 poco("车险").click()
 poco(text="立即投保").swipe([0.0033, 0.0])
 
@@ -42,8 +44,9 @@ poco("com.android.providers.media.module:id/title").click()
 poco(text="文件管理").click()
 poco(text="内部存储设备").click()
 poco(text="3is").click()
-poco(text="01.png").click()
+poco(text="00.png").click()
      
+sleep(3.0)
      
 poco(text="投保单录入").click()
 
@@ -56,17 +59,21 @@ poco("com.android.providers.media.module:id/title").click()
 poco(text="文件管理").click()
 poco(text="内部存储设备").click()
 poco(text="3is").click()
-poco(text="01.jpg").click()
+poco(text="00.png").click()
+sleep(3.0)
 
 #行驶证车辆
 poco("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[5].child("android.view.View").child("android.view.View").child("android.view.View")[1].click()
-poco("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[5].child("android.view.View").child("android.view.View").child("android.view.View")[1].child("android.view.View")[1].child("android.view.View").child("android.view.View").child("android.view.View").child("android.view.View").child("android.view.View")[1].child("android.view.View").child("android.widget.TextView").child("android.widget.TextView").click()
+
+touch(Template(r"tpl1784259225565.png", record_pos=(-0.022, 0.248), resolution=(1080, 2520)))
+
 
 #向下滚动
 poco("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[9].swipe([0.0997, -0.4813])
 
 #过户情况
-poco("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[9].child("android.view.View").child("android.view.View")[1].child("android.view.View").click()
+poco("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[6].child("android.view.View").child("android.view.View")[1].offspring("android.widget.Image").click()
+
 touch(Template(r"tpl1784257693294.png", record_pos=(-0.009, 0.931), resolution=(1080, 2520)))
 
 
@@ -79,5 +86,23 @@ poco(text="文件管理").click()
 poco(text="内部存储设备").click()
 poco(text="3is").click()
 poco(text="03.jpg").click()
+
+poco(text="身份证(正反面)").click()
+poco(text="媒体选择工具").click()
+poco("更多选项").click()
+poco("com.android.providers.media.module:id/title").click()
+poco(text="文件管理").click()
+poco(text="内部存储设备").click()
+poco(text="3is").click()
+poco(text="04.jpg").click()
+
+#输入手机号码
+poco("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[11].child("android.view.View").child("android.view.View").child("android.view.View")[1].child("android.view.View").child("android.view.View").child("android.view.View").child("android.view.View").click()
+
+
+
+poco("android:id/content").child("android.webkit.WebView").offspring("app").child("android.view.View").child("android.view.View")[6].child("android.view.View").child("android.view.View").child("android.view.View")[1].child("android.view.View").child("android.view.View").child("android.view.View").offspring("android.widget.EditText").set_text(mobile_phone)
+
+
 
 

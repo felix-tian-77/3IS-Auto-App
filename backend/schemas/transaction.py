@@ -25,6 +25,7 @@ class TransactionCreateRequest(BaseModel):
 class AttachmentResponse(BaseModel):
     attachment_id: str
     file_type: str
+    file_format: str
     description: Optional[str] = None
     file_size: int
     md5: str
